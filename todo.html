@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskFlow</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e0e0e0;
+      --muted: #666;
+      --accent: #4ade80;
+      --high: #f87171;
+      --medium: #fb923c;
+      --low: #60a5fa;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    #app {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 16px 80px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 0 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    nav { display: flex; gap: 4px; }
+
+    .nav-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.15s;
+    }
+
+    .nav-btn.active, .nav-btn:hover {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .hidden { display: none !important; }
+
+    .add-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .add-row input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .add-row input:focus { border-color: var(--accent); }
+
+    .add-row select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 10px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .add-row button {
+      background: var(--accent);
+      border: none;
+      color: #000;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .add-row button:hover { opacity: 0.85; }
+
+    .task-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s;
+    }
+
+    .task-row.active { border-color: var(--accent); }
+
+    .task-row.completed .task-text {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+
+    .priority-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .priority-dot.priority-high   { background: var(--high); }
+    .priority-dot.priority-medium { background: var(--medium); }
+    .priority-dot.priority-low    { background: var(--low); }
+
+    .task-check {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .task-text {
+      flex: 1;
+      font-size: 0.9rem;
+      word-break: break-word;
+    }
+
+    .task-timer {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      color: var(--muted);
+      min-width: 70px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .task-timer.running { color: var(--accent); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .task-timer.running::before {
+      content: '● ';
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .timer-btn, .delete-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .timer-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .delete-btn:hover { color: var(--high); border-color: var(--high); }
+
+    .filter-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+    }
+
+    .filter-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.15s;
+    }
+
+    .filter-btn.active, .filter-btn:hover {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    #history-table table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    #history-table th, #history-table td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.875rem;
+    }
+
+    #history-table th {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    #history-table tfoot td {
+      font-weight: 600;
+      color: var(--accent);
+      border-top: 1px solid var(--border);
+      border-bottom: none;
+    }
+
+    .empty-state {
+      color: var(--muted);
+      font-size: 0.875rem;
+      text-align: center;
+      padding: 40px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>✓ TaskFlow</h1>
+      <nav>
+        <button id="nav-tasks" class="nav-btn active">Tasks</button>
+        <button id="nav-history" class="nav-btn">History</button>
+      </nav>
+    </header>
+
+    <main>
+      <div id="view-tasks">
+        <div class="add-row">
+          <input type="text" id="task-input" placeholder="Add a task..." />
+          <select id="priority-select">
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <button id="add-btn">+ Add</button>
+        </div>
+        <div id="task-list"></div>
+      </div>
+
+      <div id="view-history" class="hidden">
+        <div class="filter-tabs">
+          <button class="filter-btn active" data-filter="day">Day</button>
+          <button class="filter-btn" data-filter="week">Week</button>
+          <button class="filter-btn" data-filter="month">Month</button>
+        </div>
+        <div id="history-table"></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ── Storage ──────────────────────────────────────────────────────────────
+    const Storage = (() => {
+      const TASKS_KEY = 'tf_tasks';
+      const SESSIONS_KEY = 'tf_sessions';
+
+      function load() {
+        return {
+          tasks: JSON.parse(localStorage.getItem(TASKS_KEY) || '[]'),
+          sessions: JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]'),
+        };
+      }
+
+      function save(tasks, sessions) {
+        localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+        localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+      }
+
+      return { load, save };
+    })();
+
+    // ── State + Helpers ───────────────────────────────────────────────────────
+    let state = { tasks: [], sessions: [] };
+
+    function persist() {
+      Storage.save(state.tasks, state.sessions);
+    }
+
+    function formatMs(ms) {
+      const totalSecs = Math.floor(ms / 1000);
+      const h = Math.floor(totalSecs / 3600);
+      const m = Math.floor((totalSecs % 3600) / 60);
+      const s = totalSecs % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ── Timer ─────────────────────────────────────────────────────────────────
+    const Timer = (() => {
+      function getLiveMs(task) {
+        if (!task.activeTimer) return task.accumulatedMs;
+        return task.accumulatedMs + (Date.now() - task.activeTimer.startTimestamp);
+      }
+
+      function stopTimer(id) {
+        const task = state.tasks.find(t => t.id === id);
+        if (!task || !task.activeTimer) return;
+        const now = Date.now();
+        const durationMs = now - task.activeTimer.startTimestamp;
+        task.accumulatedMs += durationMs;
+        state.sessions.push({
+          taskId: id,
+          startedAt: task.activeTimer.startTimestamp,
+          endedAt: now,
+          durationMs,
+        });
+        task.activeTimer = null;
+        persist();
+      }
+
+      function stopAll() {
+        state.tasks.filter(t => t.activeTimer).forEach(t => stopTimer(t.id));
+      }
+
+      function startTimer(id) {
+        stopAll();
+        const task = state.tasks.find(t => t.id === id);
+        if (!task) return;
+        task.activeTimer = { startTimestamp: Date.now() };
+        persist();
+      }
+
+      return { getLiveMs, startTimer, stopTimer, stopAll };
+    })();
+
+    // ── CRUD ──────────────────────────────────────────────────────────────────
+    function addTask(text, priority) {
+      const task = {
+        id: crypto.randomUUID(),
+        text,
+        priority,
+        completed: false,
+        createdAt: Date.now(),
+        completedAt: null,
+        accumulatedMs: 0,
+        activeTimer: null,
+      };
+      state.tasks.push(task);
+      persist();
+      return task;
+    }
+
+    function deleteTask(id) {
+      Timer.stopTimer(id);
+      state.tasks = state.tasks.filter(t => t.id !== id);
+      state.sessions = state.sessions.filter(s => s.taskId !== id);
+      persist();
+    }
+
+    function toggleComplete(id) {
+      const task = state.tasks.find(t => t.id === id);
+      if (!task) return;
+      task.completed = !task.completed;
+      task.completedAt = task.completed ? Date.now() : null;
+      persist();
+    }
+
+    // ── Render: Tasks ─────────────────────────────────────────────────────────
+    function renderTasks() {
+      const list = document.getElementById('task-list');
+      if (!list) return;
+
+      const PRIORITY_ORDER = ['high', 'medium', 'low'];
+
+      const sorted = [...state.tasks].sort((a, b) => {
+        const pi = PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority);
+        if (pi !== 0) return pi;
+        return (a.completed ? 1 : 0) - (b.completed ? 1 : 0);
+      });
+
+      if (sorted.length === 0) {
+        list.innerHTML = '<p class="empty-state">No tasks yet. Add one above.</p>';
+        return;
+      }
+
+      list.innerHTML = sorted.map(task => {
+        const liveMs = Timer.getLiveMs(task);
+        const isActive = !!task.activeTimer;
+        return `<div class="task-row${task.completed ? ' completed' : ''}${isActive ? ' active' : ''}" data-id="${task.id}">
+          <span class="priority-dot priority-${task.priority}"></span>
+          <input type="checkbox" class="task-check" data-id="${task.id}"${task.completed ? ' checked' : ''} />
+          <span class="task-text">${escapeHtml(task.text)}</span>
+          <span class="task-timer${isActive ? ' running' : ''}">${formatMs(liveMs)}</span>
+          <button class="timer-btn" data-id="${task.id}" data-action="${isActive ? 'stop' : 'start'}">${isActive ? '■' : '▶'}</button>
+          <button class="delete-btn" data-id="${task.id}">🗑</button>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Render: History ───────────────────────────────────────────────────────
+    function renderHistory(filter) {
+      const container = document.getElementById('history-table');
+      if (!container) return;
+
+      const now = Date.now();
+      let windowStart;
+      if (filter === 'day') {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        windowStart = d.getTime();
+      } else if (filter === 'week') {
+        windowStart = now - 7 * 24 * 60 * 60 * 1000;
+      } else {
+        windowStart = now - 30 * 24 * 60 * 60 * 1000;
+      }
+
+      const totals = {};
+      state.sessions
+        .filter(s => s.startedAt >= windowStart)
+        .forEach(s => {
+          totals[s.taskId] = (totals[s.taskId] || 0) + s.durationMs;
+        });
+
+      state.tasks.forEach(t => {
+        if (t.activeTimer && t.activeTimer.startTimestamp >= windowStart) {
+          const live = Date.now() - t.activeTimer.startTimestamp;
+          totals[t.id] = (totals[t.id] || 0) + live;
+        }
+      });
+
+      const entries = Object.entries(totals);
+      if (entries.length === 0) {
+        container.innerHTML = '<p class="empty-state">No activity in this period.</p>';
+        return;
+      }
+
+      let grandTotal = 0;
+      const rows = entries.map(([taskId, ms]) => {
+        grandTotal += ms;
+        const task = state.tasks.find(t => t.id === taskId);
+        const name = task ? escapeHtml(task.text) : '(deleted task)';
+        return `<tr><td>${name}</td><td>${formatMs(ms)}</td></tr>`;
+      }).join('');
+
+      container.innerHTML = `<table>
+        <thead><tr><th>Task</th><th>Total Time</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td>Total</td><td>${formatMs(grandTotal)}</td></tr></tfoot>
+      </table>`;
+    }
+
+    // ── Events + Init ─────────────────────────────────────────────────────────
+    let currentView = 'tasks';
+    let currentHistoryFilter = 'day';
+
+    function showView(view) {
+      currentView = view;
+      document.getElementById('view-tasks').classList.toggle('hidden', view !== 'tasks');
+      document.getElementById('view-history').classList.toggle('hidden', view !== 'history');
+      document.getElementById('nav-tasks').classList.toggle('active', view === 'tasks');
+      document.getElementById('nav-history').classList.toggle('active', view === 'history');
+      if (view === 'tasks') renderTasks();
+      else renderHistory(currentHistoryFilter);
+    }
+
+    function tick() {
+      const hasActive = state.tasks.some(t => t.activeTimer);
+      if (currentView === 'tasks' && hasActive) {
+        renderTasks();
+      } else if (currentView === 'history') {
+        renderHistory(currentHistoryFilter);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const loaded = Storage.load();
+      state.tasks = loaded.tasks;
+      state.sessions = loaded.sessions;
+
+      document.getElementById('add-btn').addEventListener('click', () => {
+        const input = document.getElementById('task-input');
+        const priority = document.getElementById('priority-select').value;
+        const text = input.value.trim();
+        if (!text) return;
+        addTask(text, priority);
+        input.value = '';
+        renderTasks();
+      });
+
+      document.getElementById('task-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('add-btn').click();
+      });
+
+      document.getElementById('task-list').addEventListener('click', e => {
+        const id = e.target.dataset.id;
+        if (!id) return;
+        if (e.target.classList.contains('task-check')) {
+          toggleComplete(id);
+          renderTasks();
+        } else if (e.target.classList.contains('timer-btn')) {
+          if (e.target.dataset.action === 'start') Timer.startTimer(id);
+          else Timer.stopTimer(id);
+          renderTasks();
+        } else if (e.target.classList.contains('delete-btn')) {
+          deleteTask(id);
+          renderTasks();
+        }
+      });
+
+      document.getElementById('nav-tasks').addEventListener('click', () => showView('tasks'));
+      document.getElementById('nav-history').addEventListener('click', () => showView('history'));
+
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentHistoryFilter = btn.dataset.filter;
+          renderHistory(currentHistoryFilter);
+        });
+      });
+
+      setInterval(tick, 1000);
+      renderTasks();
+    });
+  </script>
+</body>
+</html>
