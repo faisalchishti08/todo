@@ -366,6 +366,7 @@
             <option value="medium" selected>Medium</option>
             <option value="low">Low</option>
           </select>
+          <input type="text" id="target-input" placeholder="Target (30m, 1h…)" style="width:110px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 10px;border-radius:8px;font-size:0.875rem;outline:none;" />
           <button id="add-btn">+ Add</button>
         </div>
         <div id="task-list"></div>
@@ -864,10 +865,13 @@
       document.getElementById('add-btn').addEventListener('click', () => {
         const input = document.getElementById('task-input');
         const priority = document.getElementById('priority-select').value;
+        const targetInput = document.getElementById('target-input');
         const text = input.value.trim();
         if (!text) return;
-        addTask(text, priority);
+        const dailyTargetMs = parseTargetInput(targetInput.value);
+        addTask(text, priority, dailyTargetMs);
         input.value = '';
+        targetInput.value = '';
         renderTasks();
       });
 
