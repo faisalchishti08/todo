@@ -438,6 +438,40 @@
         .replace(/"/g, '&quot;');
     }
 
+    function parseTargetInput(str) {
+      const s = (str || '').trim().toLowerCase();
+      if (!s) return null;
+      const mMatch = s.match(/^(\d+\.?\d*)m$/);
+      if (mMatch) return Math.round(parseFloat(mMatch[1]) * 60000);
+      const hMatch = s.match(/^(\d+\.?\d*)h$/);
+      if (hMatch) return Math.round(parseFloat(hMatch[1]) * 3600000);
+      const numMatch = s.match(/^(\d+\.?\d*)$/);
+      if (numMatch) return Math.round(parseFloat(numMatch[1]) * 60000);
+      return null;
+    }
+
+    function formatTarget(ms) {
+      const totalMins = Math.round(ms / 60000);
+      if (totalMins < 60) return `${totalMins}m`;
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return m === 0 ? `${h}h` : `${h}h${m}m`;
+    }
+
+    function getDailyMs(taskId) {
+      const midnight = new Date();
+      midnight.setHours(0, 0, 0, 0);
+      const midnightTs = midnight.getTime();
+      const fromSessions = state.sessions
+        .filter(s => s.taskId === taskId && s.startedAt >= midnightTs)
+        .reduce((acc, s) => acc + s.durationMs, 0);
+      const task = state.tasks.find(t => t.id === taskId);
+      const liveMs = task?.activeTimer
+        ? Math.max(0, Date.now() - Math.max(task.activeTimer.startTimestamp, midnightTs))
+        : 0;
+      return fromSessions + liveMs;
+    }
+
     // ── Pause Manager ─────────────────────────────────────────────────────────
     const PauseManager = (() => {
       function start() {
@@ -504,7 +538,7 @@
     })();
 
     // ── CRUD ──────────────────────────────────────────────────────────────────
-    function addTask(text, priority) {
+    function addTask(text, priority, dailyTargetMs = null) {
       const task = {
         id: crypto.randomUUID(),
         text,
@@ -514,6 +548,7 @@
         completedAt: null,
         accumulatedMs: 0,
         activeTimer: null,
+        dailyTargetMs,
       };
       state.tasks.push(task);
       persist();
