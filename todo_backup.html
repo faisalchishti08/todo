@@ -66,42 +66,8 @@
       color: var(--text);
       border-color: var(--accent);
     }
-    
-    .nav-btn.special {
-      color: var(--medium);
-      border-color: var(--border);
-    }
-    
-    .nav-btn.special:hover {
-      border-color: var(--medium);
-    }
 
     .hidden { display: none !important; }
-
-    #pause-banner {
-      background: rgba(248, 113, 113, 0.1);
-      border: 1px solid var(--high);
-      color: var(--high);
-      padding: 12px 16px;
-      border-radius: 8px;
-      margin-bottom: 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.9rem;
-      font-weight: 600;
-      animation: fadeIn 0.3s ease-in-out;
-    }
-
-    #pause-banner span {
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 1rem;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-5px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
 
     .add-row {
       display: flex;
@@ -278,11 +244,6 @@
       border-top: 1px solid var(--border);
       border-bottom: none;
     }
-    
-    .pause-row {
-      color: var(--high);
-      font-style: italic;
-    }
 
     .empty-state {
       color: var(--muted);
@@ -297,18 +258,12 @@
     <header>
       <h1>✓ TaskFlow</h1>
       <nav>
-        <button id="pip-btn" class="nav-btn special">🔲 Pop-out</button>
         <button id="nav-tasks" class="nav-btn active">Tasks</button>
         <button id="nav-history" class="nav-btn">History</button>
       </nav>
     </header>
 
     <main>
-      <div id="pause-banner" class="hidden">
-        <div>⏸ Paused Focus Tracked</div>
-        <span id="pause-timer">00:00:00</span>
-      </div>
-
       <div id="view-tasks">
         <div class="add-row">
           <input type="text" id="task-input" placeholder="Add a task..." />
@@ -338,39 +293,27 @@
     const Storage = (() => {
       const TASKS_KEY = 'tf_tasks';
       const SESSIONS_KEY = 'tf_sessions';
-      const PAUSES_KEY = 'tf_pauses';
 
       function load() {
         return {
           tasks: JSON.parse(localStorage.getItem(TASKS_KEY) || '[]'),
           sessions: JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]'),
-          pauseSessions: JSON.parse(localStorage.getItem(PAUSES_KEY) || '[]'),
-          activePause: JSON.parse(localStorage.getItem('tf_active_pause') || 'null'),
-          lastActiveTaskId: localStorage.getItem('tf_last_task') || null
         };
       }
 
-      function save(tasks, sessions, pauseSessions, activePause, lastActiveTaskId) {
+      function save(tasks, sessions) {
         localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
         localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
-        localStorage.setItem(PAUSES_KEY, JSON.stringify(pauseSessions));
-        localStorage.setItem('tf_active_pause', JSON.stringify(activePause));
-        if (lastActiveTaskId) {
-          localStorage.setItem('tf_last_task', lastActiveTaskId);
-        } else {
-          localStorage.removeItem('tf_last_task');
-        }
       }
 
       return { load, save };
     })();
 
     // ── State + Helpers ───────────────────────────────────────────────────────
-    let state = { tasks: [], sessions: [], pauseSessions: [], activePause: null, lastActiveTaskId: null };
-    let pipWindow = null; 
+    let state = { tasks: [], sessions: [] };
 
     function persist() {
-      Storage.save(state.tasks, state.sessions, state.pauseSessions, state.activePause, state.lastActiveTaskId);
+      Storage.save(state.tasks, state.sessions);
     }
 
     function formatMs(ms) {
@@ -388,29 +331,6 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     }
-
-    // ── Pause Manager ─────────────────────────────────────────────────────────
-    const PauseManager = (() => {
-      function start() {
-        if (state.activePause) return;
-        state.activePause = { startTimestamp: Date.now(), lastNotifiedMin: 0 };
-        persist();
-      }
-
-      function stop() {
-        if (!state.activePause) return;
-        const durationMs = Date.now() - state.activePause.startTimestamp;
-        state.pauseSessions.push({
-          startedAt: state.activePause.startTimestamp,
-          endedAt: Date.now(),
-          durationMs
-        });
-        state.activePause = null;
-        persist();
-      }
-
-      return { start, stop };
-    })();
 
     // ── Timer ─────────────────────────────────────────────────────────────────
     const Timer = (() => {
@@ -432,9 +352,7 @@
           durationMs,
         });
         task.activeTimer = null;
-        state.lastActiveTaskId = id; 
         persist();
-        PauseManager.start(); 
       }
 
       function stopAll() {
@@ -443,11 +361,9 @@
 
       function startTimer(id) {
         stopAll();
-        PauseManager.stop(); 
         const task = state.tasks.find(t => t.id === id);
         if (!task) return;
         task.activeTimer = { startTimestamp: Date.now() };
-        state.lastActiveTaskId = id;
         persist();
       }
 
@@ -475,7 +391,6 @@
       Timer.stopTimer(id);
       state.tasks = state.tasks.filter(t => t.id !== id);
       state.sessions = state.sessions.filter(s => s.taskId !== id);
-      if (state.lastActiveTaskId === id) state.lastActiveTaskId = null;
       persist();
     }
 
@@ -484,10 +399,6 @@
       if (!task) return;
       task.completed = !task.completed;
       task.completedAt = task.completed ? Date.now() : null;
-      
-      if (task.completed && task.activeTimer) {
-        Timer.stopTimer(id);
-      }
       persist();
     }
 
@@ -554,17 +465,8 @@
         }
       });
 
-      let pauseTotal = 0;
-      state.pauseSessions
-        .filter(p => p.startedAt >= windowStart)
-        .forEach(p => { pauseTotal += p.durationMs; });
-        
-      if (state.activePause && state.activePause.startTimestamp >= windowStart) {
-        pauseTotal += (Date.now() - state.activePause.startTimestamp);
-      }
-
       const entries = Object.entries(totals);
-      if (entries.length === 0 && pauseTotal === 0) {
+      if (entries.length === 0) {
         container.innerHTML = '<p class="empty-state">No activity in this period.</p>';
         return;
       }
@@ -576,137 +478,12 @@
         const name = task ? escapeHtml(task.text) : '(deleted task)';
         return `<tr><td>${name}</td><td>${formatMs(ms)}</td></tr>`;
       }).join('');
-      
-      const pauseRowHtml = pauseTotal > 0 ? `<tr class="pause-row"><td>⏸ Paused Focus</td><td>${formatMs(pauseTotal)}</td></tr>` : '';
 
       container.innerHTML = `<table>
         <thead><tr><th>Task</th><th>Total Time</th></tr></thead>
-        <tbody>
-          ${rows}
-          ${pauseRowHtml}
-        </tbody>
-        <tfoot><tr><td>Total Productive Time</td><td>${formatMs(grandTotal)}</td></tr></tfoot>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td>Total</td><td>${formatMs(grandTotal)}</td></tr></tfoot>
       </table>`;
-    }
-
-    // ── Picture-in-Picture Logic ──────────────────────────────────────────────
-    async function initPip() {
-      if (!('documentPictureInPicture' in window)) {
-        alert('Your browser does not support the Document Picture-in-Picture API yet.');
-        return;
-      }
-
-      if (pipWindow) return; // Already open
-
-      try {
-        // Requested window size is much smaller now for a side-by-side layout
-        pipWindow = await window.documentPictureInPicture.requestWindow({
-          width: 160,
-          height: 60, 
-        });
-
-        const style = document.createElement('style');
-        style.textContent = `
-          body { 
-            background: #0f0f0f; margin: 0; display: flex; 
-            align-items: center; justify-content: center; height: 100vh;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            user-select: none;
-          }
-          #pip-content {
-            display: flex; align-items: center; gap: 12px;
-          }
-          .time { 
-            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.5rem; 
-            font-weight: bold; color: #4ade80; letter-spacing: -0.5px;
-          }
-          .pip-btn {
-            background: #1a1a1a; border: 1px solid #333; color: #e0e0e0;
-            width: 32px; height: 32px; border-radius: 50%;
-            cursor: pointer; font-size: 0.9rem;
-            display: none; align-items: center; justify-content: center;
-            transition: all 0.15s;
-          }
-          .pip-btn.show { display: flex; }
-          .pip-btn:hover { background: #2a2a2a; }
-          .pip-btn.stop:hover { color: #f87171; border-color: #f87171; }
-          .pip-btn.start:hover { color: #4ade80; border-color: #4ade80; }
-          
-          body.paused .time { color: #f87171; }
-        `;
-        pipWindow.document.head.appendChild(style);
-
-        const container = document.createElement('div');
-        container.id = 'pip-content';
-        container.innerHTML = `
-          <div class="time" id="pip-time">00:00:00</div>
-          <button class="pip-btn" id="pip-action-btn"></button>
-        `;
-        pipWindow.document.body.appendChild(container);
-
-        // Attach event listener once to prevent cross-window memory issues
-        pipWindow.document.getElementById('pip-action-btn').addEventListener('click', () => {
-          const activeTask = state.tasks.find(t => t.activeTimer);
-          
-          if (activeTask) {
-             Timer.stopTimer(activeTask.id);
-          } else if (state.activePause) {
-             // Smart Fallback: Resume last task, OR fallback to first incomplete task
-             let targetId = state.lastActiveTaskId;
-             if (!targetId || !state.tasks.find(t => t.id === targetId && !t.completed)) {
-                 const fallbackTask = state.tasks.find(t => !t.completed);
-                 if (fallbackTask) targetId = fallbackTask.id;
-             }
-             if (targetId) Timer.startTimer(targetId);
-          }
-          tick(); 
-          renderTasks();
-        });
-
-        pipWindow.addEventListener('pagehide', () => {
-          pipWindow = null;
-        });
-
-        updatePip(); 
-
-      } catch (err) {
-        console.error("Failed to open PiP window:", err);
-      }
-    }
-
-    function updatePip() {
-      if (!pipWindow) return;
-      const timeEl = pipWindow.document.getElementById('pip-time');
-      const btnEl = pipWindow.document.getElementById('pip-action-btn');
-      const bodyEl = pipWindow.document.body;
-
-      const activeTask = state.tasks.find(t => t.activeTimer);
-
-      if (activeTask) {
-         const liveMs = Timer.getLiveMs(activeTask);
-         timeEl.textContent = formatMs(liveMs);
-         bodyEl.classList.remove('paused');
-         
-         btnEl.className = 'pip-btn show stop';
-         btnEl.innerHTML = '■';
-
-      } else if (state.activePause) {
-         const liveMs = Date.now() - state.activePause.startTimestamp;
-         timeEl.textContent = formatMs(liveMs);
-         bodyEl.classList.add('paused');
-
-         // If there is ANY incomplete task available, show the Resume button
-         if (state.tasks.some(t => !t.completed)) {
-            btnEl.className = 'pip-btn show start';
-            btnEl.innerHTML = '▶';
-         } else {
-            btnEl.className = 'pip-btn'; 
-         }
-      } else {
-         timeEl.textContent = '00:00:00';
-         bodyEl.classList.remove('paused');
-         btnEl.className = 'pip-btn'; 
-      }
     }
 
     // ── Events + Init ─────────────────────────────────────────────────────────
@@ -724,39 +501,8 @@
     }
 
     function tick() {
-      const activeTask = state.tasks.find(t => t.activeTimer);
-      const pauseBanner = document.getElementById('pause-banner');
-      
-      updatePip();
-
-      if (activeTask) {
-         const liveMs = Timer.getLiveMs(activeTask);
-         document.title = `[${formatMs(liveMs)}] ${activeTask.text} - TaskFlow`;
-         pauseBanner.classList.add('hidden');
-      } else if (state.activePause) {
-         const liveMs = Date.now() - state.activePause.startTimestamp;
-         document.title = `[Paused: ${formatMs(liveMs)}] - TaskFlow`;
-         pauseBanner.classList.remove('hidden');
-         document.getElementById('pause-timer').textContent = formatMs(liveMs);
-         
-         const minutes = Math.floor(liveMs / 60000);
-         const tenMinInterval = Math.floor(minutes / 10);
-         
-         if (tenMinInterval > 0 && tenMinInterval > state.activePause.lastNotifiedMin) {
-           state.activePause.lastNotifiedMin = tenMinInterval;
-           persist();
-           if (Notification.permission === 'granted') {
-             new Notification('TaskFlow', { 
-               body: `You have been paused for ${tenMinInterval * 10} minutes. Time to get back to focus?` 
-             });
-           }
-         }
-      } else {
-         document.title = 'TaskFlow';
-         pauseBanner.classList.add('hidden');
-      }
-
-      if (currentView === 'tasks' && activeTask) {
+      const hasActive = state.tasks.some(t => t.activeTimer);
+      if (currentView === 'tasks' && hasActive) {
         renderTasks();
       } else if (currentView === 'history') {
         renderHistory(currentHistoryFilter);
@@ -764,18 +510,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-
       const loaded = Storage.load();
       state.tasks = loaded.tasks;
       state.sessions = loaded.sessions;
-      state.pauseSessions = loaded.pauseSessions || [];
-      state.activePause = loaded.activePause || null;
-      state.lastActiveTaskId = loaded.lastActiveTaskId || null;
-
-      document.getElementById('pip-btn').addEventListener('click', initPip);
 
       document.getElementById('add-btn').addEventListener('click', () => {
         const input = document.getElementById('task-input');
