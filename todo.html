@@ -413,10 +413,26 @@
     }
     .note-item:hover .note-item-delete { opacity: 1; }
     .note-item-delete:hover { color: var(--high); }
+    .note-audio audio { width: 100%; height: 30px; margin-top: 6px; }
+    .note-shot { max-width: 100%; border-radius: 6px; margin-top: 6px; display: block; }
     .notes-add-area {
       padding: 12px 20px; border-top: 1px solid var(--border);
-      flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end;
+      flex-shrink: 0; display: flex; flex-direction: column; gap: 8px;
     }
+    #notes-pending-preview:empty { display: none; }
+    .notes-pending-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 6px 10px; margin-bottom: 6px;
+      font-size: 0.8rem; color: var(--muted);
+    }
+    .notes-pending-item img { max-height: 50px; border-radius: 4px; }
+    .notes-pending-remove {
+      margin-left: auto; background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 0.8rem; flex-shrink: 0;
+    }
+    .notes-pending-remove:hover { color: var(--high); }
+    .notes-add-row { display: flex; gap: 8px; align-items: flex-end; }
     .notes-textarea {
       flex: 1; background: var(--bg); border: 1px solid var(--border);
       color: var(--text); padding: 8px 12px; border-radius: 8px;
@@ -424,10 +440,18 @@
       outline: none; min-height: 60px; transition: border-color 0.15s;
     }
     .notes-textarea:focus { border-color: var(--accent); }
+    .notes-media-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      width: 36px; height: 36px; border-radius: 8px; cursor: pointer;
+      font-size: 0.95rem; flex-shrink: 0; transition: all 0.15s;
+    }
+    .notes-media-btn:hover { color: var(--text); border-color: var(--accent); }
+    .notes-media-btn.recording { color: var(--high); border-color: var(--high); animation: pulse 1.2s ease-in-out infinite; }
     .notes-save-btn {
       background: var(--accent); border: none; color: #000;
       padding: 8px 16px; border-radius: 8px; font-size: 0.875rem;
       font-weight: 600; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s;
+      height: 36px;
     }
     .notes-save-btn:hover { opacity: 0.85; }
 
@@ -452,6 +476,8 @@
     .notes-view-item { background: var(--surface); border-radius: 6px; padding: 8px 12px; }
     .notes-view-meta { font-size: 0.72rem; color: var(--muted); margin-bottom: 3px; }
     .notes-view-text { font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+    .notes-view-item .note-audio audio { width: 100%; height: 30px; margin-top: 6px; }
+    .notes-view-item .note-shot { max-width: 100%; border-radius: 6px; margin-top: 6px; display: block; }
 
     #total-target-bar {
       position: relative;
@@ -541,8 +567,13 @@
       </div>
       <div class="notes-list" id="notes-list"></div>
       <div class="notes-add-area">
-        <textarea class="notes-textarea" id="notes-textarea" placeholder="Add a note… (Ctrl+Enter to save)" rows="2"></textarea>
-        <button class="notes-save-btn" id="notes-save-btn">Save</button>
+        <div id="notes-pending-preview"></div>
+        <div class="notes-add-row">
+          <textarea class="notes-textarea" id="notes-textarea" placeholder="Add a note… (Ctrl+Enter to save)" rows="2"></textarea>
+          <button class="notes-media-btn" id="notes-mic-btn" title="Record audio">🎤</button>
+          <button class="notes-media-btn" id="notes-shot-btn" title="Capture screenshot">🖥</button>
+          <button class="notes-save-btn" id="notes-save-btn">Save</button>
+        </div>
       </div>
     </div>
   </div>
@@ -582,6 +613,56 @@
       return { load, save };
     })();
 
+    // ── Media Store (IndexedDB, for audio/screenshot blobs) ───────────────────
+    const MediaStore = (() => {
+      const DB_NAME = 'tf_media_db';
+      const STORE = 'media';
+      let dbPromise = null;
+
+      function getDb() {
+        if (dbPromise) return dbPromise;
+        dbPromise = new Promise((resolve, reject) => {
+          const req = indexedDB.open(DB_NAME, 1);
+          req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+        return dbPromise;
+      }
+
+      async function put(id, blob) {
+        const db = await getDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE, 'readwrite');
+          tx.objectStore(STORE).put(blob, id);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+
+      async function get(id) {
+        const db = await getDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE, 'readonly');
+          const req = tx.objectStore(STORE).get(id);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function remove(id) {
+        const db = await getDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE, 'readwrite');
+          tx.objectStore(STORE).delete(id);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+
+      return { put, get, remove };
+    })();
+
     // ── State + Helpers ───────────────────────────────────────────────────────
     let state = { tasks: [], sessions: [], pauseSessions: [], activePause: null, lastActiveTaskId: null, notes: [] };
     let pipWindow = null;
@@ -590,6 +671,14 @@
     let notesViewExpanded = {};
     let pipNoteTaskId = null;
     let pipExpanded = false;
+    let pendingAudioBlob = null;
+    let pendingScreenshotBlob = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let pipPendingAudioBlob = null;
+    let pipPendingScreenshotBlob = null;
+    let pipMediaRecorder = null;
+    let pipAudioChunks = [];
 
     function persist() {
       Storage.save(state.tasks, state.sessions, state.pauseSessions, state.activePause, state.lastActiveTaskId, state.notes);
@@ -732,6 +821,10 @@
       Timer.stopTimer(id);
       state.tasks = state.tasks.filter(t => t.id !== id);
       state.sessions = state.sessions.filter(s => s.taskId !== id);
+      state.notes.filter(n => n.taskId === id).forEach(n => {
+        if (n.audioId) MediaStore.remove(n.audioId);
+        if (n.screenshotId) MediaStore.remove(n.screenshotId);
+      });
       state.notes = state.notes.filter(n => n.taskId !== id);
       if (state.lastActiveTaskId === id) state.lastActiveTaskId = null;
       persist();
@@ -992,7 +1085,21 @@
             font-family: inherit; resize: none; outline: none; width: 100%; height: 36px;
           }
           #pip-note-input:focus { border-color: #4ade80; }
-          #pip-note-actions { display: flex; gap: 4px; justify-content: flex-end; }
+          #pip-note-pending:empty { display: none; }
+          .pip-note-pending-item {
+            display: flex; align-items: center; gap: 6px;
+            background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px;
+            padding: 3px 6px; font-size: 0.6rem; color: #999;
+          }
+          .pip-note-pending-item img { max-height: 30px; border-radius: 3px; }
+          .pip-note-pending-remove { margin-left: auto; background: none; border: none; color: #666; cursor: pointer; font-size: 0.6rem; }
+          #pip-note-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
+          .pip-note-media-btn {
+            background: none; border: 1px solid #2a2a2a; color: #666;
+            border-radius: 4px; width: 20px; height: 20px; font-size: 0.6rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; margin-right: auto;
+          }
+          .pip-note-media-btn.recording { color: #f87171; border-color: #f87171; }
           .pip-note-action-btn {
             background: none; border: 1px solid #2a2a2a; color: #666;
             border-radius: 4px; padding: 2px 8px; font-size: 0.6rem; cursor: pointer;
@@ -1024,8 +1131,11 @@
           <div id="pip-task-list"></div>
           <div id="pip-note-area">
             <div id="pip-note-label">Note for: <span id="pip-note-task-name"></span></div>
+            <div id="pip-note-pending"></div>
             <textarea id="pip-note-input" placeholder="Type note…"></textarea>
             <div id="pip-note-actions">
+              <button class="pip-note-media-btn" id="pip-note-mic-btn" title="Record audio">🎤</button>
+              <button class="pip-note-media-btn" id="pip-note-shot-btn" title="Capture screenshot">🖥</button>
               <button class="pip-note-action-btn" id="pip-note-cancel">✕ Cancel</button>
               <button class="pip-note-action-btn save" id="pip-note-save">✓ Save</button>
             </div>
@@ -1035,14 +1145,19 @@
 
         pipWindow.document.body.addEventListener('click', e => {
           const doc = pipWindow.document;
-          const expandBtn  = e.target.closest('#pip-expand-btn');
-          const noteBtn    = e.target.closest('.pip-note-btn');
-          const noteSave   = e.target.closest('#pip-note-save');
-          const noteCancel = e.target.closest('#pip-note-cancel');
-          const taskRow    = e.target.closest('.pip-task');
-          const actionBtn  = e.target.closest('#pip-action-btn');
+          const expandBtn     = e.target.closest('#pip-expand-btn');
+          const pendingRemove = e.target.closest('.pip-note-pending-remove');
+          const micBtn        = e.target.closest('#pip-note-mic-btn');
+          const shotBtn       = e.target.closest('#pip-note-shot-btn');
+          const noteBtn       = e.target.closest('.pip-note-btn');
+          const noteSave      = e.target.closest('#pip-note-save');
+          const noteCancel    = e.target.closest('#pip-note-cancel');
+          const taskRow       = e.target.closest('.pip-task');
+          const actionBtn     = e.target.closest('#pip-action-btn');
 
           if (expandBtn) {
+            const anchorX = pipWindow.screenX;
+            const anchorY = pipWindow.screenY;
             pipExpanded = !pipExpanded;
             if (pipExpanded) {
               pipWindow.resizeTo(880, 720);
@@ -1055,32 +1170,113 @@
               expandBtn.textContent = '⤢';
               expandBtn.title = 'Expand window';
             }
+            pipWindow.moveTo(anchorX, anchorY);
+            return;
+          }
+
+          if (pendingRemove) {
+            if (pendingRemove.dataset.remove === 'audio') pipPendingAudioBlob = null;
+            else pipPendingScreenshotBlob = null;
+            renderPipNotePending();
+            return;
+          }
+
+          if (micBtn) {
+            if (pipMediaRecorder && pipMediaRecorder.state === 'recording') {
+              pipMediaRecorder.stop();
+              return;
+            }
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+              pipAudioChunks = [];
+              pipMediaRecorder = new MediaRecorder(stream);
+              pipMediaRecorder.ondataavailable = ev => pipAudioChunks.push(ev.data);
+              pipMediaRecorder.onstop = () => {
+                pipPendingAudioBlob = new Blob(pipAudioChunks, { type: 'audio/webm' });
+                stream.getTracks().forEach(t => t.stop());
+                micBtn.classList.remove('recording');
+                micBtn.textContent = '🎤';
+                renderPipNotePending();
+              };
+              pipMediaRecorder.start();
+              micBtn.classList.add('recording');
+              micBtn.textContent = '⏹';
+            }).catch(err => {
+              console.error('Mic error:', err);
+              alert('Could not access microphone.');
+            });
+            return;
+          }
+
+          if (shotBtn) {
+            navigator.mediaDevices.getDisplayMedia({ video: true }).then(async stream => {
+              const video = doc.createElement('video');
+              video.muted = true;
+              video.srcObject = stream;
+              await new Promise(resolve => { video.onloadedmetadata = () => { video.play(); resolve(); }; });
+              await new Promise(r => setTimeout(r, 150));
+              const canvas = doc.createElement('canvas');
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              canvas.getContext('2d').drawImage(video, 0, 0);
+              stream.getTracks().forEach(t => t.stop());
+              canvas.toBlob(blob => {
+                pipPendingScreenshotBlob = blob;
+                renderPipNotePending();
+              }, 'image/png');
+            }).catch(err => {
+              console.error('Screenshot error:', err);
+              if (err.name !== 'NotAllowedError') alert('Could not capture screen.');
+            });
             return;
           }
 
           if (noteSave) {
             const text = doc.getElementById('pip-note-input').value.trim();
-            if (text && pipNoteTaskId) {
-              state.notes.push({ id: crypto.randomUUID(), taskId: pipNoteTaskId, text, createdAt: Date.now() });
-              persist();
-              renderTasks();
+            if (pipNoteTaskId && (text || pipPendingAudioBlob || pipPendingScreenshotBlob)) {
+              const note = { id: crypto.randomUUID(), taskId: pipNoteTaskId, text, createdAt: Date.now(), audioId: null, screenshotId: null };
+              const puts = [];
+              if (pipPendingAudioBlob) { note.audioId = crypto.randomUUID(); puts.push(MediaStore.put(note.audioId, pipPendingAudioBlob)); }
+              if (pipPendingScreenshotBlob) { note.screenshotId = crypto.randomUUID(); puts.push(MediaStore.put(note.screenshotId, pipPendingScreenshotBlob)); }
+              Promise.all(puts).then(() => {
+                state.notes.push(note);
+                persist();
+                renderTasks();
+              });
             }
             pipNoteTaskId = null;
+            pipPendingAudioBlob = null;
+            pipPendingScreenshotBlob = null;
+            renderPipNotePending();
             doc.getElementById('pip-note-area').classList.remove('show');
             doc.getElementById('pip-note-input').value = '';
-          } else if (noteCancel) {
+            return;
+          }
+
+          if (noteCancel) {
             pipNoteTaskId = null;
+            pipPendingAudioBlob = null;
+            pipPendingScreenshotBlob = null;
+            renderPipNotePending();
             doc.getElementById('pip-note-area').classList.remove('show');
             doc.getElementById('pip-note-input').value = '';
-          } else if (noteBtn) {
+            return;
+          }
+
+          if (noteBtn) {
             const id = noteBtn.dataset.id;
             const task = state.tasks.find(t => t.id === id);
             pipNoteTaskId = id;
+            pipPendingAudioBlob = null;
+            pipPendingScreenshotBlob = null;
+            renderPipNotePending();
             doc.getElementById('pip-note-task-name').textContent = task ? task.text.substring(0, 22) : '';
             doc.getElementById('pip-note-input').value = '';
             doc.getElementById('pip-note-area').classList.add('show');
             doc.getElementById('pip-note-input').focus();
-          } else if (actionBtn) {
+            return;
+          }
+
+          if (actionBtn) {
             const activeTask = state.tasks.find(t => t.activeTimer);
             if (activeTask) {
               Timer.stopTimer(activeTask.id);
@@ -1094,7 +1290,10 @@
             }
             tick();
             renderTasks();
-          } else if (taskRow && !e.target.closest('.pip-note-btn')) {
+            return;
+          }
+
+          if (taskRow) {
             const id = taskRow.dataset.id;
             const task = state.tasks.find(t => t.id === id);
             if (!task) return;
@@ -1105,7 +1304,10 @@
           }
         });
 
-        pipWindow.addEventListener('pagehide', () => { pipWindow = null; pipExpanded = false; pipNoteTaskId = null; });
+        pipWindow.addEventListener('pagehide', () => {
+          pipWindow = null; pipExpanded = false; pipNoteTaskId = null;
+          pipPendingAudioBlob = null; pipPendingScreenshotBlob = null;
+        });
         updatePip();
 
       } catch (err) {
@@ -1228,6 +1430,64 @@
     }
 
     // ── Notes ─────────────────────────────────────────────────────────────────
+    function hydrateMedia(container) {
+      container.querySelectorAll('[data-audio-id]').forEach(el => {
+        const id = el.dataset.audioId;
+        if (!id) return;
+        MediaStore.get(id).then(blob => {
+          if (!blob) return;
+          el.innerHTML = `<audio controls src="${URL.createObjectURL(blob)}"></audio>`;
+        });
+      });
+      container.querySelectorAll('[data-screenshot-id]').forEach(el => {
+        const id = el.dataset.screenshotId;
+        if (!id) return;
+        MediaStore.get(id).then(blob => {
+          if (!blob) return;
+          el.src = URL.createObjectURL(blob);
+        });
+      });
+    }
+
+    function noteMediaHtml(note) {
+      let html = '';
+      if (note.audioId) html += `<div class="note-audio" data-audio-id="${note.audioId}"></div>`;
+      if (note.screenshotId) html += `<img class="note-shot" data-screenshot-id="${note.screenshotId}" />`;
+      return html;
+    }
+
+    function resetPendingMedia() {
+      pendingAudioBlob = null;
+      pendingScreenshotBlob = null;
+      renderPendingPreview();
+    }
+
+    function renderPendingPreview() {
+      const el = document.getElementById('notes-pending-preview');
+      let html = '';
+      if (pendingAudioBlob) {
+        html += `<div class="notes-pending-item"><span>🎤 audio recorded</span><button class="notes-pending-remove" data-remove="audio">✕ remove</button></div>`;
+      }
+      if (pendingScreenshotBlob) {
+        html += `<div class="notes-pending-item"><img src="${URL.createObjectURL(pendingScreenshotBlob)}" /><button class="notes-pending-remove" data-remove="screenshot">✕ remove</button></div>`;
+      }
+      el.innerHTML = html;
+    }
+
+    function renderPipNotePending() {
+      if (!pipWindow) return;
+      const el = pipWindow.document.getElementById('pip-note-pending');
+      if (!el) return;
+      let html = '';
+      if (pipPendingAudioBlob) {
+        html += `<div class="pip-note-pending-item"><span>🎤 recorded</span><button class="pip-note-pending-remove" data-remove="audio">✕</button></div>`;
+      }
+      if (pipPendingScreenshotBlob) {
+        html += `<div class="pip-note-pending-item"><img src="${URL.createObjectURL(pipPendingScreenshotBlob)}" /><button class="pip-note-pending-remove" data-remove="screenshot">✕</button></div>`;
+      }
+      el.innerHTML = html;
+    }
+
     function openNotesModal(taskId) {
       const task = state.tasks.find(t => t.id === taskId);
       if (!task) return;
@@ -1236,6 +1496,7 @@
       document.getElementById('notes-modal-title').textContent = task.text;
       modal.classList.remove('hidden');
       renderModalNotes(taskId);
+      resetPendingMedia();
       const ta = document.getElementById('notes-textarea');
       ta.value = '';
       ta.focus();
@@ -1253,10 +1514,12 @@
       list.innerHTML = notes.map(note => `
         <div class="note-item">
           <div class="note-item-meta">${new Date(note.createdAt).toLocaleString()}</div>
-          <div class="note-item-text">${escapeHtml(note.text)}</div>
+          ${note.text ? `<div class="note-item-text">${escapeHtml(note.text)}</div>` : ''}
+          ${noteMediaHtml(note)}
           <button class="note-item-delete" data-note-id="${note.id}">✕</button>
         </div>
       `).join('');
+      hydrateMedia(list);
     }
 
     function renderNotes() {
@@ -1285,7 +1548,8 @@
             ${notes.map(note => `
               <div class="notes-view-item">
                 <div class="notes-view-meta">${new Date(note.createdAt).toLocaleString()}</div>
-                <div class="notes-view-text">${escapeHtml(note.text)}</div>
+                ${note.text ? `<div class="notes-view-text">${escapeHtml(note.text)}</div>` : ''}
+                ${noteMediaHtml(note)}
               </div>`).join('')}
           </div>` : '';
         return `<div class="notes-task-section">
@@ -1298,6 +1562,7 @@
           ${bodyHtml}
         </div>`;
       }).join('');
+      hydrateMedia(container);
     }
 
     // ── Events + Init ─────────────────────────────────────────────────────────
@@ -1487,14 +1752,24 @@
         if (e.target === document.getElementById('notes-modal'))
           document.getElementById('notes-modal').classList.add('hidden');
       });
-      document.getElementById('notes-save-btn').addEventListener('click', () => {
+      document.getElementById('notes-save-btn').addEventListener('click', async () => {
         const ta = document.getElementById('notes-textarea');
         const text = ta.value.trim();
         const taskId = document.getElementById('notes-modal').dataset.taskId;
-        if (!text || !taskId) return;
-        state.notes.push({ id: crypto.randomUUID(), taskId, text, createdAt: Date.now() });
+        if (!taskId || (!text && !pendingAudioBlob && !pendingScreenshotBlob)) return;
+        const note = { id: crypto.randomUUID(), taskId, text, createdAt: Date.now(), audioId: null, screenshotId: null };
+        if (pendingAudioBlob) {
+          note.audioId = crypto.randomUUID();
+          await MediaStore.put(note.audioId, pendingAudioBlob);
+        }
+        if (pendingScreenshotBlob) {
+          note.screenshotId = crypto.randomUUID();
+          await MediaStore.put(note.screenshotId, pendingScreenshotBlob);
+        }
+        state.notes.push(note);
         persist();
         ta.value = '';
+        resetPendingMedia();
         renderModalNotes(taskId);
         renderTasks();
       });
@@ -1505,10 +1780,70 @@
       document.getElementById('notes-list').addEventListener('click', e => {
         const del = e.target.closest('.note-item-delete');
         if (!del) return;
+        const note = state.notes.find(n => n.id === del.dataset.noteId);
+        if (note) {
+          if (note.audioId) MediaStore.remove(note.audioId);
+          if (note.screenshotId) MediaStore.remove(note.screenshotId);
+        }
         state.notes = state.notes.filter(n => n.id !== del.dataset.noteId);
         persist();
         renderModalNotes(document.getElementById('notes-modal').dataset.taskId);
         renderTasks();
+      });
+      document.getElementById('notes-pending-preview').addEventListener('click', e => {
+        const btn = e.target.closest('.notes-pending-remove');
+        if (!btn) return;
+        if (btn.dataset.remove === 'audio') pendingAudioBlob = null;
+        else pendingScreenshotBlob = null;
+        renderPendingPreview();
+      });
+      document.getElementById('notes-mic-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('notes-mic-btn');
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+          return;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          audioChunks = [];
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+          mediaRecorder.onstop = () => {
+            pendingAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            stream.getTracks().forEach(t => t.stop());
+            btn.classList.remove('recording');
+            btn.textContent = '🎤';
+            renderPendingPreview();
+          };
+          mediaRecorder.start();
+          btn.classList.add('recording');
+          btn.textContent = '⏹';
+        } catch (err) {
+          console.error('Mic error:', err);
+          alert('Could not access microphone.');
+        }
+      });
+      document.getElementById('notes-shot-btn').addEventListener('click', async () => {
+        try {
+          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          const video = document.createElement('video');
+          video.muted = true;
+          video.srcObject = stream;
+          await new Promise(resolve => { video.onloadedmetadata = () => { video.play(); resolve(); }; });
+          await new Promise(r => setTimeout(r, 150));
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext('2d').drawImage(video, 0, 0);
+          stream.getTracks().forEach(t => t.stop());
+          canvas.toBlob(blob => {
+            pendingScreenshotBlob = blob;
+            renderPendingPreview();
+          }, 'image/png');
+        } catch (err) {
+          console.error('Screenshot error:', err);
+          if (err.name !== 'NotAllowedError') alert('Could not capture screen.');
+        }
       });
 
       // Notes view toggle
