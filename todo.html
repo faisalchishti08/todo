@@ -597,11 +597,28 @@
       list.innerHTML = sorted.map(task => {
         const liveMs = Timer.getLiveMs(task);
         const isActive = !!task.activeTimer;
+
+        const dailyMs = task.dailyTargetMs ? getDailyMs(task.id) : 0;
+        const pct = task.dailyTargetMs
+          ? Math.min(dailyMs / task.dailyTargetMs * 100, 100)
+          : 0;
+        const targetMet = task.dailyTargetMs && dailyMs >= task.dailyTargetMs;
+
+        const fillBarHtml = task.dailyTargetMs
+          ? `<div class="fill-bar ${targetMet ? 'complete' : 'filling'}" style="width:${pct.toFixed(2)}%"></div>`
+          : '';
+
+        const targetBadgeHtml = task.dailyTargetMs
+          ? `<button class="target-badge ${targetMet ? 'met' : 'unmet'}" data-id="${task.id}" data-action="edit-target">⊙ ${formatTarget(task.dailyTargetMs)}</button>`
+          : `<button class="target-badge add-target" data-id="${task.id}" data-action="edit-target">⊕</button>`;
+
         return `<div class="task-row${task.completed ? ' completed' : ''}${isActive ? ' active' : ''}" data-id="${task.id}">
+          ${fillBarHtml}
           <span class="priority-dot priority-${task.priority}"></span>
           <input type="checkbox" class="task-check" data-id="${task.id}"${task.completed ? ' checked' : ''} />
           <span class="task-text">${escapeHtml(task.text)}</span>
           <span class="task-timer${isActive ? ' running' : ''}">${formatMs(liveMs)}</span>
+          ${targetBadgeHtml}
           <button class="timer-btn" data-id="${task.id}" data-action="${isActive ? 'stop' : 'start'}">${isActive ? '■' : '▶'}</button>
           <button class="delete-btn" data-id="${task.id}">🗑</button>
         </div>`;
