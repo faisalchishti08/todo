@@ -772,87 +772,129 @@
       if (pipWindow) return; // Already open
 
       try {
-        // Requested window size is much smaller now for a side-by-side layout
         pipWindow = await window.documentPictureInPicture.requestWindow({
-          width: 130,
-          height: 40,
+          width: 220,
+          height: 180,
         });
 
         const style = document.createElement('style');
         style.textContent = `
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
           body {
-            background: #0f0f0f; margin: 0; display: flex;
-            align-items: center; justify-content: center; height: 100vh;
+            background: #0f0f0f; display: flex; flex-direction: column;
+            height: 100vh; overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            user-select: none; position: relative; overflow: hidden;
+            user-select: none;
           }
-          #pip-content {
-            display: flex; align-items: center; gap: 8px; position: relative; z-index: 1;
+          #pip-header {
+            position: relative; overflow: hidden; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            gap: 8px; padding: 8px 12px;
+            border-bottom: 1px solid #1e1e1e;
           }
-          .time {
-            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1rem;
-            font-weight: bold; color: #4ade80; letter-spacing: -0.5px;
-          }
-          .pip-btn {
-            background: #1a1a1a; border: 1px solid #333; color: #e0e0e0;
-            width: 22px; height: 22px; border-radius: 50%;
-            cursor: pointer; font-size: 0.65rem;
-            display: none; align-items: center; justify-content: center;
-            transition: all 0.15s;
-          }
-          .pip-btn.show { display: flex; }
-          .pip-btn:hover { background: #2a2a2a; }
-          .pip-btn.stop:hover { color: #f87171; border-color: #f87171; }
-          .pip-btn.start:hover { color: #4ade80; border-color: #4ade80; }
-          .pip-fill {
+          #pip-fill {
             position: absolute; left: 0; top: 0; height: 100%; width: 0%;
             background: rgba(74, 222, 128, 0.15);
             transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
             pointer-events: none;
           }
-          .pip-fill.complete { background: rgba(74, 222, 128, 0.3); }
-
+          #pip-fill.complete { background: rgba(74, 222, 128, 0.3); }
+          .time {
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1rem;
+            font-weight: bold; color: #4ade80; letter-spacing: -0.5px;
+            position: relative; z-index: 1;
+          }
           body.paused .time { color: #f87171; }
+          .pip-btn {
+            background: #1a1a1a; border: 1px solid #333; color: #e0e0e0;
+            width: 22px; height: 22px; border-radius: 50%;
+            cursor: pointer; font-size: 0.6rem;
+            display: none; align-items: center; justify-content: center;
+            transition: all 0.15s; position: relative; z-index: 1;
+          }
+          .pip-btn.show { display: flex; }
+          .pip-btn:hover { background: #2a2a2a; }
+          .pip-btn.stop:hover  { color: #f87171; border-color: #f87171; }
+          .pip-btn.start:hover { color: #4ade80; border-color: #4ade80; }
+          #pip-task-list {
+            flex: 1; overflow-y: auto; padding: 4px 0;
+            scrollbar-width: thin; scrollbar-color: #2a2a2a transparent;
+          }
+          #pip-task-list::-webkit-scrollbar { width: 3px; }
+          #pip-task-list::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+          .pip-task {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 10px; cursor: pointer; transition: background 0.12s;
+          }
+          .pip-task:hover { background: #1c1c1c; }
+          .pip-task.pip-active { background: rgba(74, 222, 128, 0.08); }
+          .pip-task-dot {
+            width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+          }
+          .pip-task-name {
+            flex: 1; font-size: 0.72rem; color: #c0c0c0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          }
+          .pip-task.pip-active .pip-task-name { color: #4ade80; }
+          .pip-task-btn {
+            background: none; border: 1px solid #2a2a2a; color: #555;
+            width: 18px; height: 18px; border-radius: 4px; font-size: 0.5rem;
+            cursor: pointer; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.12s;
+          }
+          .pip-task:hover .pip-task-btn { color: #4ade80; border-color: #4ade80; }
+          .pip-task.pip-active .pip-task-btn { color: #f87171; border-color: #f87171; }
+          #pip-scroll-hint {
+            text-align: center; font-size: 0.6rem; color: #2a2a2a;
+            padding: 3px 0; flex-shrink: 0; letter-spacing: 0.03em;
+            transition: color 0.2s;
+          }
+          body:hover #pip-scroll-hint { color: #444; }
         `;
         pipWindow.document.head.appendChild(style);
 
-        const fillEl = document.createElement('div');
-        fillEl.id = 'pip-fill';
-        fillEl.className = 'pip-fill';
-        pipWindow.document.body.appendChild(fillEl);
-
-        const container = document.createElement('div');
-        container.id = 'pip-content';
-        container.innerHTML = `
-          <div class="time" id="pip-time">00:00:00</div>
-          <button class="pip-btn" id="pip-action-btn"></button>
+        pipWindow.document.body.innerHTML = `
+          <div id="pip-header">
+            <div id="pip-fill"></div>
+            <div class="time" id="pip-time">00:00:00</div>
+            <button class="pip-btn" id="pip-action-btn"></button>
+          </div>
+          <div id="pip-task-list"></div>
+          <div id="pip-scroll-hint">↕ scroll for tasks</div>
         `;
-        pipWindow.document.body.appendChild(container);
 
-        // Attach event listener once to prevent cross-window memory issues
-        pipWindow.document.getElementById('pip-action-btn').addEventListener('click', () => {
-          const activeTask = state.tasks.find(t => t.activeTimer);
-          
-          if (activeTask) {
-             Timer.stopTimer(activeTask.id);
-          } else if (state.activePause) {
-             // Smart Fallback: Resume last task, OR fallback to first incomplete task
-             let targetId = state.lastActiveTaskId;
-             if (!targetId || !state.tasks.find(t => t.id === targetId && !t.completed)) {
-                 const fallbackTask = state.tasks.find(t => !t.completed);
-                 if (fallbackTask) targetId = fallbackTask.id;
-             }
-             if (targetId) Timer.startTimer(targetId);
+        pipWindow.document.body.addEventListener('click', e => {
+          const taskBtn = e.target.closest('.pip-task-btn');
+          const taskRow = e.target.closest('.pip-task');
+          const actionBtn = e.target.closest('#pip-action-btn');
+
+          if (actionBtn) {
+            const activeTask = state.tasks.find(t => t.activeTimer);
+            if (activeTask) {
+              Timer.stopTimer(activeTask.id);
+            } else if (state.activePause) {
+              let targetId = state.lastActiveTaskId;
+              if (!targetId || !state.tasks.find(t => t.id === targetId && !t.completed)) {
+                const fallback = state.tasks.find(t => !t.completed);
+                if (fallback) targetId = fallback.id;
+              }
+              if (targetId) Timer.startTimer(targetId);
+            }
+          } else if (taskRow) {
+            const id = taskRow.dataset.id;
+            const task = state.tasks.find(t => t.id === id);
+            if (!task) return;
+            if (task.activeTimer) Timer.stopTimer(id);
+            else Timer.startTimer(id);
           }
-          tick(); 
+
+          tick();
           renderTasks();
         });
 
-        pipWindow.addEventListener('pagehide', () => {
-          pipWindow = null;
-        });
-
-        updatePip(); 
+        pipWindow.addEventListener('pagehide', () => { pipWindow = null; });
+        updatePip();
 
       } catch (err) {
         console.error("Failed to open PiP window:", err);
@@ -861,47 +903,56 @@
 
     function updatePip() {
       if (!pipWindow) return;
-      const timeEl = pipWindow.document.getElementById('pip-time');
-      const btnEl = pipWindow.document.getElementById('pip-action-btn');
-      const fillEl = pipWindow.document.getElementById('pip-fill');
-      const bodyEl = pipWindow.document.body;
+      const doc = pipWindow.document;
+      const timeEl  = doc.getElementById('pip-time');
+      const btnEl   = doc.getElementById('pip-action-btn');
+      const fillEl  = doc.getElementById('pip-fill');
+      const listEl  = doc.getElementById('pip-task-list');
+      const bodyEl  = doc.body;
 
       const activeTask = state.tasks.find(t => t.activeTimer);
+      const PRIORITY_COLOR = { high: '#f87171', medium: '#fb923c', low: '#60a5fa' };
 
+      // ── Header ────────────────────────────────────────────────────────────────
       if (activeTask) {
-         const liveMs = Timer.getLiveMs(activeTask);
-         timeEl.textContent = formatMs(liveMs);
-         bodyEl.classList.remove('paused');
-         btnEl.className = 'pip-btn show stop';
-         btnEl.innerHTML = '■';
-
-         if (fillEl && activeTask.dailyTargetMs) {
-           const dailyMs = getDailyMs(activeTask.id);
-           const pct = Math.min(dailyMs / activeTask.dailyTargetMs * 100, 100);
-           fillEl.style.width = pct.toFixed(2) + '%';
-           fillEl.className = pct >= 100 ? 'pip-fill complete' : 'pip-fill';
-         } else if (fillEl) {
-           fillEl.style.width = '0%';
-           fillEl.className = 'pip-fill';
-         }
-
+        timeEl.textContent = formatMs(Timer.getLiveMs(activeTask));
+        bodyEl.classList.remove('paused');
+        btnEl.className = 'pip-btn show stop';
+        btnEl.innerHTML = '■';
+        if (fillEl && activeTask.dailyTargetMs) {
+          const pct = Math.min(getDailyMs(activeTask.id) / activeTask.dailyTargetMs * 100, 100);
+          fillEl.style.width = pct.toFixed(2) + '%';
+          fillEl.className = pct >= 100 ? 'complete' : '';
+        } else if (fillEl) {
+          fillEl.style.width = '0%'; fillEl.className = '';
+        }
       } else if (state.activePause) {
-         const liveMs = Date.now() - state.activePause.startTimestamp;
-         timeEl.textContent = formatMs(liveMs);
-         bodyEl.classList.add('paused');
-         if (fillEl) { fillEl.style.width = '0%'; fillEl.className = 'pip-fill'; }
-
-         if (state.tasks.some(t => !t.completed)) {
-            btnEl.className = 'pip-btn show start';
-            btnEl.innerHTML = '▶';
-         } else {
-            btnEl.className = 'pip-btn';
-         }
+        timeEl.textContent = formatMs(Date.now() - state.activePause.startTimestamp);
+        bodyEl.classList.add('paused');
+        if (fillEl) { fillEl.style.width = '0%'; fillEl.className = ''; }
+        btnEl.className = state.tasks.some(t => !t.completed) ? 'pip-btn show start' : 'pip-btn';
+        btnEl.innerHTML = '▶';
       } else {
-         timeEl.textContent = '00:00:00';
-         bodyEl.classList.remove('paused');
-         btnEl.className = 'pip-btn';
-         if (fillEl) { fillEl.style.width = '0%'; fillEl.className = 'pip-fill'; }
+        timeEl.textContent = '00:00:00';
+        bodyEl.classList.remove('paused');
+        btnEl.className = 'pip-btn';
+        if (fillEl) { fillEl.style.width = '0%'; fillEl.className = ''; }
+      }
+
+      // ── Task list ─────────────────────────────────────────────────────────────
+      if (listEl) {
+        const scroll = listEl.scrollTop;
+        const incomplete = state.tasks.filter(t => !t.completed);
+        listEl.innerHTML = incomplete.map(task => {
+          const isActive = !!task.activeTimer;
+          const dotColor = PRIORITY_COLOR[task.priority] || '#666';
+          return `<div class="pip-task${isActive ? ' pip-active' : ''}" data-id="${task.id}">
+            <span class="pip-task-dot" style="background:${dotColor}"></span>
+            <span class="pip-task-name">${escapeHtml(task.text)}</span>
+            <button class="pip-task-btn" data-id="${task.id}">${isActive ? '■' : '▶'}</button>
+          </div>`;
+        }).join('');
+        listEl.scrollTop = scroll;
       }
     }
 
