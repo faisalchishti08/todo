@@ -339,6 +339,32 @@
     }
 
     #target-input:focus { border-color: var(--accent) !important; }
+
+    #total-target-bar {
+      position: relative;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    #total-target-bar .ttb-fill {
+      position: absolute;
+      left: 0; top: 0; height: 100%;
+      width: 0%;
+      background: rgba(74, 222, 128, 0.12);
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+    #total-target-bar.complete .ttb-fill { background: rgba(74, 222, 128, 0.28); }
+    #total-target-bar .ttb-label {
+      position: relative;
+      z-index: 1;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
   </style>
 </head>
 <body>
@@ -368,6 +394,10 @@
           </select>
           <input type="text" id="target-input" placeholder="Target (30m, 1h…)" style="width:110px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 10px;border-radius:8px;font-size:0.875rem;outline:none;" />
           <button id="add-btn">+ Add</button>
+        </div>
+        <div id="total-target-bar" class="hidden">
+          <div class="ttb-fill"></div>
+          <span class="ttb-label" id="ttb-label"></span>
         </div>
         <div id="task-list"></div>
       </div>
@@ -623,6 +653,7 @@
           <button class="delete-btn" data-id="${task.id}">🗑</button>
         </div>`;
       }).join('');
+      renderTotalTarget();
     }
 
     // ── Render: History ───────────────────────────────────────────────────────
@@ -832,6 +863,24 @@
          btnEl.className = 'pip-btn';
          if (fillEl) { fillEl.style.width = '0%'; fillEl.className = 'pip-fill'; }
       }
+    }
+
+    function renderTotalTarget() {
+      const bar = document.getElementById('total-target-bar');
+      if (!bar) return;
+      const tasksWithTargets = state.tasks.filter(t => t.dailyTargetMs && !t.completed);
+      if (tasksWithTargets.length === 0) {
+        bar.classList.add('hidden');
+        return;
+      }
+      const totalTargetMs = tasksWithTargets.reduce((acc, t) => acc + t.dailyTargetMs, 0);
+      const totalDailyMs = tasksWithTargets.reduce((acc, t) => acc + getDailyMs(t.id), 0);
+      const pct = Math.min(totalDailyMs / totalTargetMs * 100, 100);
+      bar.classList.remove('hidden');
+      bar.classList.toggle('complete', totalDailyMs >= totalTargetMs);
+      bar.querySelector('.ttb-fill').style.width = pct.toFixed(2) + '%';
+      document.getElementById('ttb-label').textContent =
+        `Today: ${formatTarget(Math.round(totalDailyMs))} / ${formatTarget(totalTargetMs)}`;
     }
 
     function openTargetEdit(taskId) {
