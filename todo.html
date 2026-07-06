@@ -340,6 +340,29 @@
 
     #target-input:focus { border-color: var(--accent) !important; }
 
+    .task-row[draggable="true"] { cursor: grab; }
+    .task-row[draggable="true"]:active { cursor: grabbing; }
+    .task-row.dragging { opacity: 0.4; }
+    .task-row.drag-over { border-color: var(--accent); border-style: dashed; }
+
+    .completed-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.875rem;
+      cursor: pointer;
+      margin-bottom: 8px;
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s;
+    }
+    .completed-toggle:hover { color: var(--text); border-color: var(--accent); }
+
     #total-target-bar {
       position: relative;
       overflow: hidden;
