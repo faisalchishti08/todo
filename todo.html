@@ -774,8 +774,8 @@
       try {
         // Requested window size is much smaller now for a side-by-side layout
         pipWindow = await window.documentPictureInPicture.requestWindow({
-          width: 160,
-          height: 60, 
+          width: 130,
+          height: 40,
         });
 
         const style = document.createElement('style');
@@ -787,16 +787,16 @@
             user-select: none; position: relative; overflow: hidden;
           }
           #pip-content {
-            display: flex; align-items: center; gap: 12px; position: relative; z-index: 1;
+            display: flex; align-items: center; gap: 8px; position: relative; z-index: 1;
           }
           .time {
-            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.5rem;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1rem;
             font-weight: bold; color: #4ade80; letter-spacing: -0.5px;
           }
           .pip-btn {
             background: #1a1a1a; border: 1px solid #333; color: #e0e0e0;
-            width: 32px; height: 32px; border-radius: 50%;
-            cursor: pointer; font-size: 0.9rem;
+            width: 22px; height: 22px; border-radius: 50%;
+            cursor: pointer; font-size: 0.65rem;
             display: none; align-items: center; justify-content: center;
             transition: all 0.15s;
           }
