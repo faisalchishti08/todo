@@ -471,7 +471,9 @@
 
     // ── State + Helpers ───────────────────────────────────────────────────────
     let state = { tasks: [], sessions: [], pauseSessions: [], activePause: null, lastActiveTaskId: null };
-    let pipWindow = null; 
+    let pipWindow = null;
+    let completedExpanded = false;
+    let dragSrcId = null;
 
     function persist() {
       Storage.save(state.tasks, state.sessions, state.pauseSessions, state.activePause, state.lastActiveTaskId);
@@ -605,7 +607,7 @@
         activeTimer: null,
         dailyTargetMs,
       };
-      state.tasks.push(task);
+      state.tasks.unshift(task);
       persist();
       return task;
     }
@@ -1016,6 +1018,7 @@
       state.pauseSessions = loaded.pauseSessions || [];
       state.activePause = loaded.activePause || null;
       state.lastActiveTaskId = loaded.lastActiveTaskId || null;
+      completedExpanded = localStorage.getItem('tf_completed_expanded') === 'true';
 
       document.getElementById('pip-btn').addEventListener('click', initPip);
 
@@ -1037,6 +1040,31 @@
       });
 
       document.getElementById('task-list').addEventListener('click', e => {
+        const id = e.target.dataset.id;
+        if (!id) return;
+        if (e.target.classList.contains('task-check')) {
+          toggleComplete(id);
+          renderTasks();
+        } else if (e.target.classList.contains('timer-btn')) {
+          if (e.target.dataset.action === 'start') Timer.startTimer(id);
+          else Timer.stopTimer(id);
+          renderTasks();
+        } else if (e.target.classList.contains('delete-btn')) {
+          deleteTask(id);
+          renderTasks();
+        } else if (e.target.dataset.action === 'edit-target') {
+          openTargetEdit(id);
+        }
+      });
+
+      document.getElementById('completed-section').addEventListener('click', e => {
+        const btn = e.target.closest('#completed-toggle-btn');
+        if (btn) {
+          completedExpanded = !completedExpanded;
+          localStorage.setItem('tf_completed_expanded', String(completedExpanded));
+          renderTasks();
+          return;
+        }
         const id = e.target.dataset.id;
         if (!id) return;
         if (e.target.classList.contains('task-check')) {
