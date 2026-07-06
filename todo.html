@@ -923,6 +923,16 @@
         `Today: ${formatTarget(Math.round(totalDailyMs))} / ${formatTarget(totalTargetMs)}`;
     }
 
+    function reorderTask(srcId, targetId) {
+      if (srcId === targetId) return;
+      const srcIdx = state.tasks.findIndex(t => t.id === srcId);
+      const tgtIdx = state.tasks.findIndex(t => t.id === targetId);
+      if (srcIdx === -1 || tgtIdx === -1) return;
+      const [task] = state.tasks.splice(srcIdx, 1);
+      state.tasks.splice(tgtIdx, 0, task);
+      persist();
+    }
+
     function openTargetEdit(taskId) {
       const task = state.tasks.find(t => t.id === taskId);
       if (!task) return;
@@ -1080,6 +1090,44 @@
         } else if (e.target.dataset.action === 'edit-target') {
           openTargetEdit(id);
         }
+      });
+
+      const taskList = document.getElementById('task-list');
+
+      taskList.addEventListener('dragstart', e => {
+        const row = e.target.closest('.task-row');
+        if (!row) return;
+        dragSrcId = row.dataset.id;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      taskList.addEventListener('dragover', e => {
+        e.preventDefault();
+        const row = e.target.closest('.task-row');
+        if (!row || row.dataset.id === dragSrcId) return;
+        document.querySelectorAll('.task-row.drag-over').forEach(r => r.classList.remove('drag-over'));
+        row.classList.add('drag-over');
+      });
+
+      taskList.addEventListener('dragleave', e => {
+        const row = e.target.closest('.task-row');
+        if (row) row.classList.remove('drag-over');
+      });
+
+      taskList.addEventListener('drop', e => {
+        e.preventDefault();
+        const row = e.target.closest('.task-row');
+        if (!row || !dragSrcId) return;
+        reorderTask(dragSrcId, row.dataset.id);
+        dragSrcId = null;
+        renderTasks();
+      });
+
+      taskList.addEventListener('dragend', () => {
+        dragSrcId = null;
+        document.querySelectorAll('.task-row.dragging, .task-row.drag-over')
+          .forEach(r => r.classList.remove('dragging', 'drag-over'));
       });
 
       document.getElementById('nav-tasks').addEventListener('click', () => showView('tasks'));
