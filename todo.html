@@ -709,17 +709,17 @@
 
         const style = document.createElement('style');
         style.textContent = `
-          body { 
-            background: #0f0f0f; margin: 0; display: flex; 
+          body {
+            background: #0f0f0f; margin: 0; display: flex;
             align-items: center; justify-content: center; height: 100vh;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            user-select: none;
+            user-select: none; position: relative; overflow: hidden;
           }
           #pip-content {
-            display: flex; align-items: center; gap: 12px;
+            display: flex; align-items: center; gap: 12px; position: relative; z-index: 1;
           }
-          .time { 
-            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.5rem; 
+          .time {
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.5rem;
             font-weight: bold; color: #4ade80; letter-spacing: -0.5px;
           }
           .pip-btn {
@@ -733,10 +733,22 @@
           .pip-btn:hover { background: #2a2a2a; }
           .pip-btn.stop:hover { color: #f87171; border-color: #f87171; }
           .pip-btn.start:hover { color: #4ade80; border-color: #4ade80; }
-          
+          .pip-fill {
+            position: absolute; left: 0; top: 0; height: 100%; width: 0%;
+            background: rgba(74, 222, 128, 0.15);
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+          }
+          .pip-fill.complete { background: rgba(74, 222, 128, 0.3); }
+
           body.paused .time { color: #f87171; }
         `;
         pipWindow.document.head.appendChild(style);
+
+        const fillEl = document.createElement('div');
+        fillEl.id = 'pip-fill';
+        fillEl.className = 'pip-fill';
+        pipWindow.document.body.appendChild(fillEl);
 
         const container = document.createElement('div');
         container.id = 'pip-content';
@@ -780,6 +792,7 @@
       if (!pipWindow) return;
       const timeEl = pipWindow.document.getElementById('pip-time');
       const btnEl = pipWindow.document.getElementById('pip-action-btn');
+      const fillEl = pipWindow.document.getElementById('pip-fill');
       const bodyEl = pipWindow.document.body;
 
       const activeTask = state.tasks.find(t => t.activeTimer);
@@ -788,26 +801,36 @@
          const liveMs = Timer.getLiveMs(activeTask);
          timeEl.textContent = formatMs(liveMs);
          bodyEl.classList.remove('paused');
-         
          btnEl.className = 'pip-btn show stop';
          btnEl.innerHTML = '■';
+
+         if (fillEl && activeTask.dailyTargetMs) {
+           const dailyMs = getDailyMs(activeTask.id);
+           const pct = Math.min(dailyMs / activeTask.dailyTargetMs * 100, 100);
+           fillEl.style.width = pct.toFixed(2) + '%';
+           fillEl.className = pct >= 100 ? 'pip-fill complete' : 'pip-fill';
+         } else if (fillEl) {
+           fillEl.style.width = '0%';
+           fillEl.className = 'pip-fill';
+         }
 
       } else if (state.activePause) {
          const liveMs = Date.now() - state.activePause.startTimestamp;
          timeEl.textContent = formatMs(liveMs);
          bodyEl.classList.add('paused');
+         if (fillEl) { fillEl.style.width = '0%'; fillEl.className = 'pip-fill'; }
 
-         // If there is ANY incomplete task available, show the Resume button
          if (state.tasks.some(t => !t.completed)) {
             btnEl.className = 'pip-btn show start';
             btnEl.innerHTML = '▶';
          } else {
-            btnEl.className = 'pip-btn'; 
+            btnEl.className = 'pip-btn';
          }
       } else {
          timeEl.textContent = '00:00:00';
          bodyEl.classList.remove('paused');
-         btnEl.className = 'pip-btn'; 
+         btnEl.className = 'pip-btn';
+         if (fillEl) { fillEl.style.width = '0%'; fillEl.className = 'pip-fill'; }
       }
     }
 
