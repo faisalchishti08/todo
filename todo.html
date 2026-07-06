@@ -589,6 +589,7 @@
     let dragSrcId = null;
     let notesViewExpanded = {};
     let pipNoteTaskId = null;
+    let pipExpanded = false;
 
     function persist() {
       Storage.save(state.tasks, state.sessions, state.pauseSessions, state.activePause, state.lastActiveTaskId, state.notes);
@@ -999,6 +1000,17 @@
           }
           .pip-note-action-btn.save { color: #4ade80; border-color: #4ade80; }
           .pip-note-action-btn:hover { opacity: 0.75; }
+          #pip-expand-btn {
+            background: none; border: 1px solid #2a2a2a; color: #555;
+            width: 20px; height: 20px; border-radius: 4px; font-size: 0.6rem;
+            cursor: pointer; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s; position: relative; z-index: 1;
+          }
+          #pip-expand-btn:hover { color: #4ade80; border-color: #4ade80; }
+          body.pip-big #pip-note-input { height: 100px; }
+          body.pip-big .pip-task { padding: 7px 12px; }
+          body.pip-big .pip-task-name { font-size: 0.8rem; }
         `;
         pipWindow.document.head.appendChild(style);
 
@@ -1007,6 +1019,7 @@
             <div id="pip-fill"></div>
             <div class="time" id="pip-time">00:00:00</div>
             <button class="pip-btn" id="pip-action-btn"></button>
+            <button id="pip-expand-btn" title="Expand window">⤢</button>
           </div>
           <div id="pip-task-list"></div>
           <div id="pip-note-area">
@@ -1022,11 +1035,28 @@
 
         pipWindow.document.body.addEventListener('click', e => {
           const doc = pipWindow.document;
+          const expandBtn  = e.target.closest('#pip-expand-btn');
           const noteBtn    = e.target.closest('.pip-note-btn');
           const noteSave   = e.target.closest('#pip-note-save');
           const noteCancel = e.target.closest('#pip-note-cancel');
           const taskRow    = e.target.closest('.pip-task');
           const actionBtn  = e.target.closest('#pip-action-btn');
+
+          if (expandBtn) {
+            pipExpanded = !pipExpanded;
+            if (pipExpanded) {
+              pipWindow.resizeTo(880, 720);
+              doc.body.classList.add('pip-big');
+              expandBtn.textContent = '⤡';
+              expandBtn.title = 'Collapse window';
+            } else {
+              pipWindow.resizeTo(220, 180);
+              doc.body.classList.remove('pip-big');
+              expandBtn.textContent = '⤢';
+              expandBtn.title = 'Expand window';
+            }
+            return;
+          }
 
           if (noteSave) {
             const text = doc.getElementById('pip-note-input').value.trim();
@@ -1075,7 +1105,7 @@
           }
         });
 
-        pipWindow.addEventListener('pagehide', () => { pipWindow = null; });
+        pipWindow.addEventListener('pagehide', () => { pipWindow = null; pipExpanded = false; pipNoteTaskId = null; });
         updatePip();
 
       } catch (err) {
