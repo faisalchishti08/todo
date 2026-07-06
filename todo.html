@@ -811,6 +811,36 @@
       }
     }
 
+    function openTargetEdit(taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task) return;
+      const badge = document.querySelector(`[data-id="${taskId}"][data-action="edit-target"]`);
+      if (!badge) return;
+      const currentVal = task.dailyTargetMs ? formatTarget(task.dailyTargetMs) : '';
+      const input = document.createElement('input');
+      input.className = 'target-edit-input';
+      input.value = currentVal;
+      input.placeholder = '30m, 1h…';
+      badge.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let saved = false;
+      function save() {
+        if (saved) return;
+        saved = true;
+        task.dailyTargetMs = parseTargetInput(input.value);
+        persist();
+        renderTasks();
+      }
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') save();
+        if (e.key === 'Escape') { saved = true; renderTasks(); }
+      });
+      input.addEventListener('blur', save);
+    }
+
     // ── Events + Init ─────────────────────────────────────────────────────────
     let currentView = 'tasks';
     let currentHistoryFilter = 'day';
@@ -909,6 +939,8 @@
         } else if (e.target.classList.contains('delete-btn')) {
           deleteTask(id);
           renderTasks();
+        } else if (e.target.dataset.action === 'edit-target') {
+          openTargetEdit(id);
         }
       });
 
