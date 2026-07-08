@@ -1124,7 +1124,7 @@
           }
           .pip-note-pending-item img { max-height: 30px; border-radius: 3px; }
           .pip-note-pending-remove { margin-left: auto; background: none; border: none; color: #666; cursor: pointer; font-size: 0.6rem; }
-          #pip-note-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
+          #pip-note-actions, #pip-add-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
           .pip-note-media-btn {
             background: none; border: 1px solid #2a2a2a; color: #666;
             border-radius: 4px; width: 20px; height: 20px; font-size: 0.6rem; cursor: pointer;
@@ -1165,7 +1165,7 @@
 
           /* Compact: hide secondary controls as window narrows */
           @container (max-width: 160px) {
-            .pip-note-btn, .pip-check-btn, #pip-expand-btn { display: none; }
+            .pip-note-btn, .pip-check-btn, #pip-expand-btn, #pip-add-btn { display: none; }
           }
 
           /* Mini: too small for a task list — icon-only play/pause */
@@ -1197,7 +1197,7 @@
           </div>
           <div id="pip-add-area">
             <input id="pip-add-input" type="text" placeholder="New task…" />
-            <div id="pip-note-actions">
+            <div id="pip-add-actions">
               <button class="pip-note-action-btn" id="pip-add-cancel">✕ Cancel</button>
               <button class="pip-note-action-btn save" id="pip-add-save">✓ Add</button>
             </div>
