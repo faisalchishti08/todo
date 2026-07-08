@@ -1007,7 +1007,7 @@
           #pip-scroll::-webkit-scrollbar { width: 3px; }
           #pip-scroll::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
           #pip-header {
-            position: relative; overflow: hidden;
+            position: relative; overflow: hidden; min-width: 0;
             display: flex; align-items: center; justify-content: center;
             gap: 8px; padding: 8px 12px;
             border-bottom: 1px solid #1e1e1e;
@@ -1020,9 +1020,9 @@
           }
           #pip-fill.complete { background: rgba(74, 222, 128, 0.3); }
           .time {
-            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1rem;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: clamp(0.55rem, 11vw, 1rem);
             font-weight: bold; color: #4ade80; letter-spacing: -0.5px;
-            position: relative; z-index: 1;
+            position: relative; z-index: 1; white-space: nowrap;
           }
           body.paused .time { color: #f87171; }
           .pip-btn {
@@ -1038,7 +1038,7 @@
           .pip-btn.start:hover { color: #4ade80; border-color: #4ade80; }
           #pip-task-list { padding: 4px 0; }
           .pip-task {
-            display: flex; align-items: center; gap: 6px;
+            display: flex; align-items: center; gap: 6px; min-width: 0;
             padding: 5px 10px; cursor: pointer; transition: background 0.12s;
           }
           .pip-task:hover { background: #1c1c1c; }
@@ -1053,7 +1053,7 @@
           }
           .pip-check-btn:hover { border-color: #4ade80; background: rgba(74,222,128,0.15); }
           .pip-task-name {
-            flex: 1; font-size: 0.72rem; color: #c0c0c0;
+            flex: 1; min-width: 0; font-size: clamp(0.55rem, 8vw, 0.72rem); color: #c0c0c0;
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           }
           .pip-task.pip-active .pip-task-name { color: #4ade80; }
@@ -1081,7 +1081,7 @@
           }
           .pip-task:hover .pip-note-btn { color: #60a5fa; border-color: #60a5fa; }
           #pip-note-area {
-            display: none; flex-direction: column; gap: 4px;
+            display: none; flex-direction: column; gap: 4px; min-width: 0;
             padding: 6px 10px 8px; border-top: 1px solid #1e1e1e; flex-shrink: 0;
           }
           #pip-note-area.show { display: flex; }
@@ -1089,7 +1089,8 @@
           #pip-note-input {
             background: #1a1a1a; border: 1px solid #2a2a2a; color: #e0e0e0;
             border-radius: 4px; padding: 4px 6px; font-size: 0.68rem;
-            font-family: inherit; resize: none; outline: none; width: 100%; height: 36px;
+            font-family: inherit; resize: none; outline: none;
+            width: 100%; min-width: 0; box-sizing: border-box; height: 36px;
           }
           #pip-note-input:focus { border-color: #4ade80; }
           #pip-note-pending:empty { display: none; }
@@ -1125,6 +1126,22 @@
           body.pip-big #pip-note-input { height: 100px; }
           body.pip-big .pip-task { padding: 7px 12px; }
           body.pip-big .pip-task-name { font-size: 0.8rem; }
+
+          /* Compact: hide secondary controls as window narrows */
+          body.pip-compact .pip-note-btn,
+          body.pip-compact .pip-check-btn,
+          body.pip-compact #pip-expand-btn { display: none; }
+
+          /* Mini: too small for a task list — icon-only play/pause */
+          body.pip-mini #pip-task-list,
+          body.pip-mini #pip-scroll-hint,
+          body.pip-mini #pip-note-area,
+          body.pip-mini .time { display: none !important; }
+          body.pip-mini #pip-header { border-bottom: none; height: 100vh; padding: 0; }
+          body.pip-mini .pip-btn {
+            display: flex; width: 60%; height: 60%; max-width: 44px; max-height: 44px;
+            font-size: 1.1rem;
+          }
         `;
         pipWindow.document.head.appendChild(style);
 
@@ -1151,6 +1168,9 @@
           </div>
           <div id="pip-scroll-hint">↕ scroll for tasks</div>
         `;
+
+        pipWindow.addEventListener('resize', () => applyPipResponsive());
+        applyPipResponsive();
 
         pipWindow.document.body.addEventListener('click', e => {
           const doc = pipWindow.document;
@@ -1181,6 +1201,7 @@
               expandBtn.title = 'Expand window';
             }
             pipWindow.moveTo(anchorX, anchorY);
+            applyPipResponsive();
             return;
           }
 
@@ -1330,6 +1351,14 @@
       } catch (err) {
         console.error("Failed to open PiP window:", err);
       }
+    }
+
+    function applyPipResponsive() {
+      if (!pipWindow) return;
+      const w = pipWindow.innerWidth;
+      const body = pipWindow.document.body;
+      body.classList.toggle('pip-compact', w < 160);
+      body.classList.toggle('pip-mini', w < 110);
     }
 
     function updatePip() {
