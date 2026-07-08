@@ -1138,13 +1138,26 @@
           }
           .pip-note-action-btn.save { color: #4ade80; border-color: #4ade80; }
           .pip-note-action-btn:hover { opacity: 0.75; }
-          #pip-expand-btn {
+          #pip-expand-btn, #pip-add-btn {
             background: none; border: 1px solid #2a2a2a; color: #555;
             width: 20px; height: 20px; border-radius: 4px; font-size: 0.6rem;
             cursor: pointer; flex-shrink: 0;
             display: flex; align-items: center; justify-content: center;
             transition: all 0.15s; position: relative; z-index: 1;
           }
+          #pip-add-btn:hover { color: #4ade80; border-color: #4ade80; }
+          #pip-add-area {
+            display: none; flex-direction: column; gap: 4px; min-width: 0;
+            padding: 6px 10px 8px; border-top: 1px solid #1e1e1e; flex-shrink: 0;
+          }
+          #pip-add-area.show { display: flex; }
+          #pip-add-input {
+            background: #1a1a1a; border: 1px solid #2a2a2a; color: #e0e0e0;
+            border-radius: 4px; padding: 4px 6px; font-size: 0.68rem;
+            font-family: inherit; outline: none;
+            width: 100%; min-width: 0; box-sizing: border-box;
+          }
+          #pip-add-input:focus { border-color: #4ade80; }
           #pip-expand-btn:hover { color: #4ade80; border-color: #4ade80; }
           body.pip-big #pip-note-input { height: 100px; }
           body.pip-big .pip-task { padding: 7px 12px; }
@@ -1157,7 +1170,7 @@
 
           /* Mini: too small for a task list — icon-only play/pause */
           @container (max-width: 110px) {
-            #pip-task-list, #pip-scroll-hint, #pip-note-area, .time { display: none !important; }
+            #pip-task-list, #pip-scroll-hint, #pip-note-area, #pip-add-area, .time { display: none !important; }
             #pip-header { border-bottom: none; height: 100vh; padding: 0; }
             .pip-btn {
               display: flex; width: 60%; height: 60%; max-width: 44px; max-height: 44px;
@@ -1177,9 +1190,17 @@
               </div>
               <div class="time" id="pip-time">00:00:00</div>
               <button class="pip-btn" id="pip-action-btn"></button>
+              <button id="pip-add-btn" title="Add task">+</button>
               <button id="pip-expand-btn" title="Expand window">⤢</button>
             </div>
             <div id="pip-task-list"></div>
+          </div>
+          <div id="pip-add-area">
+            <input id="pip-add-input" type="text" placeholder="New task…" />
+            <div id="pip-note-actions">
+              <button class="pip-note-action-btn" id="pip-add-cancel">✕ Cancel</button>
+              <button class="pip-note-action-btn save" id="pip-add-save">✓ Add</button>
+            </div>
           </div>
           <div id="pip-note-area">
             <div id="pip-note-label">Note for: <span id="pip-note-task-name"></span></div>
@@ -1198,6 +1219,9 @@
         pipWindow.document.body.addEventListener('click', e => {
           const doc = pipWindow.document;
           const expandBtn     = e.target.closest('#pip-expand-btn');
+          const addBtn        = e.target.closest('#pip-add-btn');
+          const addSave       = e.target.closest('#pip-add-save');
+          const addCancel     = e.target.closest('#pip-add-cancel');
           const pendingRemove = e.target.closest('.pip-note-pending-remove');
           const micBtn        = e.target.closest('#pip-note-mic-btn');
           const shotBtn       = e.target.closest('#pip-note-shot-btn');
@@ -1207,6 +1231,35 @@
           const noteCancel    = e.target.closest('#pip-note-cancel');
           const taskRow       = e.target.closest('.pip-task');
           const actionBtn     = e.target.closest('#pip-action-btn');
+
+          if (addBtn) {
+            pipNoteTaskId = null;
+            pipPendingAudioBlob = null;
+            pipPendingScreenshotBlob = null;
+            renderPipNotePending();
+            doc.getElementById('pip-note-area').classList.remove('show');
+            doc.getElementById('pip-add-area').classList.add('show');
+            doc.getElementById('pip-add-input').value = '';
+            doc.getElementById('pip-add-input').focus();
+            return;
+          }
+
+          if (addSave) {
+            const text = doc.getElementById('pip-add-input').value.trim();
+            if (text) {
+              addTask(text, 'medium', null);
+              renderTasks();
+            }
+            doc.getElementById('pip-add-area').classList.remove('show');
+            doc.getElementById('pip-add-input').value = '';
+            return;
+          }
+
+          if (addCancel) {
+            doc.getElementById('pip-add-area').classList.remove('show');
+            doc.getElementById('pip-add-input').value = '';
+            return;
+          }
 
           if (expandBtn) {
             const anchorX = pipWindow.screenX;
@@ -1329,6 +1382,7 @@
             pipPendingAudioBlob = null;
             pipPendingScreenshotBlob = null;
             renderPipNotePending();
+            doc.getElementById('pip-add-area').classList.remove('show');
             doc.getElementById('pip-note-task-name').textContent = task ? task.text.substring(0, 22) : '';
             doc.getElementById('pip-note-input').value = '';
             doc.getElementById('pip-note-area').classList.add('show');
@@ -1361,6 +1415,16 @@
             else Timer.startTimer(id);
             tick();
             renderTasks();
+          }
+        });
+
+        pipWindow.document.body.addEventListener('keydown', e => {
+          const doc = pipWindow.document;
+          if (e.target.id === 'pip-add-input') {
+            if (e.key === 'Enter') doc.getElementById('pip-add-save').click();
+            if (e.key === 'Escape') doc.getElementById('pip-add-cancel').click();
+          } else if (e.target.id === 'pip-note-input' && e.key === 'Escape') {
+            doc.getElementById('pip-note-cancel').click();
           }
         });
 
