@@ -994,9 +994,10 @@
         const style = document.createElement('style');
         style.textContent = `
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          html, body { min-width: 0; }
           body {
             background: #0f0f0f; display: flex; flex-direction: column;
-            height: 100vh; overflow: hidden;
+            height: 100vh; overflow: hidden; container-type: inline-size;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             user-select: none;
           }
@@ -1019,10 +1020,9 @@
             pointer-events: none;
           }
           #pip-fill.complete { background: rgba(74, 222, 128, 0.3); }
-          #pip-liquid { display: none; }
-          body.pip-mini.pip-running #pip-liquid,
-          body.pip-mini.paused #pip-liquid {
-            display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+          #pip-liquid { display: none; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+          @container (max-width: 110px) {
+            body.pip-running #pip-liquid, body.paused #pip-liquid { display: block; }
           }
           #pip-liquid .wave {
             position: absolute; left: -25%; width: 150%; height: 200%;
@@ -1151,19 +1151,18 @@
           body.pip-big .pip-task-name { font-size: 0.8rem; }
 
           /* Compact: hide secondary controls as window narrows */
-          body.pip-compact .pip-note-btn,
-          body.pip-compact .pip-check-btn,
-          body.pip-compact #pip-expand-btn { display: none; }
+          @container (max-width: 160px) {
+            .pip-note-btn, .pip-check-btn, #pip-expand-btn { display: none; }
+          }
 
           /* Mini: too small for a task list — icon-only play/pause */
-          body.pip-mini #pip-task-list,
-          body.pip-mini #pip-scroll-hint,
-          body.pip-mini #pip-note-area,
-          body.pip-mini .time { display: none !important; }
-          body.pip-mini #pip-header { border-bottom: none; height: 100vh; padding: 0; }
-          body.pip-mini .pip-btn {
-            display: flex; width: 60%; height: 60%; max-width: 44px; max-height: 44px;
-            font-size: 1.1rem;
+          @container (max-width: 110px) {
+            #pip-task-list, #pip-scroll-hint, #pip-note-area, .time { display: none !important; }
+            #pip-header { border-bottom: none; height: 100vh; padding: 0; }
+            .pip-btn {
+              display: flex; width: 60%; height: 60%; max-width: 44px; max-height: 44px;
+              font-size: 1.1rem;
+            }
           }
         `;
         pipWindow.document.head.appendChild(style);
@@ -1196,9 +1195,6 @@
           <div id="pip-scroll-hint">↕ scroll for tasks</div>
         `;
 
-        pipWindow.addEventListener('resize', () => applyPipResponsive());
-        applyPipResponsive();
-
         pipWindow.document.body.addEventListener('click', e => {
           const doc = pipWindow.document;
           const expandBtn     = e.target.closest('#pip-expand-btn');
@@ -1228,7 +1224,6 @@
               expandBtn.title = 'Expand window';
             }
             pipWindow.moveTo(anchorX, anchorY);
-            applyPipResponsive();
             return;
           }
 
@@ -1378,14 +1373,6 @@
       } catch (err) {
         console.error("Failed to open PiP window:", err);
       }
-    }
-
-    function applyPipResponsive() {
-      if (!pipWindow) return;
-      const w = pipWindow.innerWidth;
-      const body = pipWindow.document.body;
-      body.classList.toggle('pip-compact', w < 160);
-      body.classList.toggle('pip-mini', w < 110);
     }
 
     function updatePip() {
