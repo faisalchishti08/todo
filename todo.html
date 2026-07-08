@@ -1019,6 +1019,29 @@
             pointer-events: none;
           }
           #pip-fill.complete { background: rgba(74, 222, 128, 0.3); }
+          #pip-liquid { display: none; }
+          body.pip-mini.pip-running #pip-liquid,
+          body.pip-mini.paused #pip-liquid {
+            display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+          }
+          #pip-liquid .wave {
+            position: absolute; left: -25%; width: 150%; height: 200%;
+            top: 55%; border-radius: 45%;
+            background: rgba(74, 222, 128, 0.35);
+            animation: pipLiquidSpin 6s linear infinite;
+            transition: top 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+          }
+          #pip-liquid .wave.wave2 {
+            background: rgba(74, 222, 128, 0.2);
+            animation-duration: 8s;
+            animation-direction: reverse;
+          }
+          body.paused #pip-liquid .wave       { background: rgba(251, 146, 60, 0.35); }
+          body.paused #pip-liquid .wave.wave2 { background: rgba(251, 146, 60, 0.2); }
+          @keyframes pipLiquidSpin {
+            0%   { transform: translateX(0) rotate(0deg); }
+            100% { transform: translateX(0) rotate(360deg); }
+          }
           .time {
             font-family: 'SF Mono', 'Fira Code', monospace; font-size: clamp(0.55rem, 11vw, 1rem);
             font-weight: bold; color: #4ade80; letter-spacing: -0.5px;
@@ -1149,6 +1172,10 @@
           <div id="pip-scroll">
             <div id="pip-header">
               <div id="pip-fill"></div>
+              <div id="pip-liquid">
+                <div class="wave wave1"></div>
+                <div class="wave wave2"></div>
+              </div>
               <div class="time" id="pip-time">00:00:00</div>
               <button class="pip-btn" id="pip-action-btn"></button>
               <button id="pip-expand-btn" title="Expand window">⤢</button>
@@ -1364,22 +1391,33 @@
     function updatePip() {
       if (!pipWindow) return;
       const doc = pipWindow.document;
-      const timeEl   = doc.getElementById('pip-time');
-      const btnEl    = doc.getElementById('pip-action-btn');
-      const fillEl   = doc.getElementById('pip-fill');
-      const listEl   = doc.getElementById('pip-task-list');
-      const scrollEl = doc.getElementById('pip-scroll');
-      const bodyEl   = doc.body;
+      const timeEl    = doc.getElementById('pip-time');
+      const btnEl     = doc.getElementById('pip-action-btn');
+      const fillEl    = doc.getElementById('pip-fill');
+      const liquidEl  = doc.getElementById('pip-liquid');
+      const listEl    = doc.getElementById('pip-task-list');
+      const scrollEl  = doc.getElementById('pip-scroll');
+      const bodyEl    = doc.body;
 
       const activeTask = state.tasks.find(t => t.activeTimer);
       const PRIORITY_COLOR = { high: '#f87171', medium: '#fb923c', low: '#60a5fa' };
+
+      const setLiquidLevel = task => {
+        if (!liquidEl) return;
+        const pct = task && task.dailyTargetMs
+          ? Math.min(getDailyMs(task.id) / task.dailyTargetMs * 100, 100)
+          : 45;
+        liquidEl.querySelectorAll('.wave').forEach(w => { w.style.top = (100 - pct) + '%'; });
+      };
 
       // ── Header ────────────────────────────────────────────────────────────────
       if (activeTask) {
         timeEl.textContent = formatMs(Timer.getLiveMs(activeTask));
         bodyEl.classList.remove('paused');
+        bodyEl.classList.add('pip-running');
         btnEl.className = 'pip-btn show stop';
         btnEl.innerHTML = '■';
+        setLiquidLevel(activeTask);
         if (fillEl && activeTask.dailyTargetMs) {
           const pct = Math.min(getDailyMs(activeTask.id) / activeTask.dailyTargetMs * 100, 100);
           fillEl.style.width = pct.toFixed(2) + '%';
@@ -1390,12 +1428,15 @@
       } else if (state.activePause) {
         timeEl.textContent = formatMs(Date.now() - state.activePause.startTimestamp);
         bodyEl.classList.add('paused');
+        bodyEl.classList.remove('pip-running');
+        setLiquidLevel(null);
         if (fillEl) { fillEl.style.width = '0%'; fillEl.className = ''; }
         btnEl.className = state.tasks.some(t => !t.completed) ? 'pip-btn show start' : 'pip-btn';
         btnEl.innerHTML = '▶';
       } else {
         timeEl.textContent = '00:00:00';
         bodyEl.classList.remove('paused');
+        bodyEl.classList.remove('pip-running');
         btnEl.className = 'pip-btn';
         if (fillEl) { fillEl.style.width = '0%'; fillEl.className = ''; }
       }
