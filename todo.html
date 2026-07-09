@@ -339,6 +339,59 @@
     }
 
     #target-input:focus { border-color: var(--accent) !important; }
+    #label-input:focus { border-color: var(--low) !important; }
+
+    .label-badge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--low);
+      background: none;
+      color: var(--low);
+      cursor: pointer;
+      flex-shrink: 0;
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .label-badge.add-label {
+      color: var(--muted);
+      border-color: var(--border);
+      opacity: 0;
+    }
+    .task-row:hover .label-badge.add-label { opacity: 1; }
+
+    .label-edit-input {
+      font-size: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--low);
+      color: var(--text);
+      padding: 2px 8px;
+      border-radius: 10px;
+      width: 90px;
+      outline: none;
+      flex-shrink: 0;
+    }
+
+    .label-group-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin: 12px 0 8px;
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s;
+    }
+    .label-group-toggle:hover { color: var(--text); border-color: var(--low); }
 
     .task-row[draggable="true"] { cursor: grab; }
     .task-row[draggable="true"]:active { cursor: grabbing; }
@@ -533,6 +586,8 @@
             <option value="low">Low</option>
           </select>
           <input type="text" id="target-input" placeholder="Target (30m, 1h…)" style="width:110px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 10px;border-radius:8px;font-size:0.875rem;outline:none;" />
+          <input type="text" id="label-input" list="label-datalist" placeholder="Label (optional)" style="width:120px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 10px;border-radius:8px;font-size:0.875rem;outline:none;" />
+          <datalist id="label-datalist"></datalist>
           <button id="add-btn">+ Add</button>
         </div>
         <div id="total-target-bar" class="hidden">
@@ -667,6 +722,7 @@
     let state = { tasks: [], sessions: [], pauseSessions: [], activePause: null, lastActiveTaskId: null, notes: [] };
     let pipWindow = null;
     let completedExpanded = false;
+    let labelGroupExpanded = {};
     let dragSrcId = null;
     let notesViewExpanded = {};
     let pipNoteTaskId = null;
@@ -800,7 +856,7 @@
     })();
 
     // ── CRUD ──────────────────────────────────────────────────────────────────
-    function addTask(text, priority, dailyTargetMs = null) {
+    function addTask(text, priority, dailyTargetMs = null, label = null) {
       const task = {
         id: crypto.randomUUID(),
         text,
@@ -811,6 +867,7 @@
         accumulatedMs: 0,
         activeTimer: null,
         dailyTargetMs,
+        label,
       };
       state.tasks.unshift(task);
       persist();
@@ -864,6 +921,10 @@
       const hasNotes = state.notes.some(n => n.taskId === task.id);
       const notesBtnHtml = `<button class="notes-btn${hasNotes ? ' has-notes' : ''}" data-id="${task.id}" data-action="notes" title="Notes">✎</button>`;
 
+      const labelBadgeHtml = task.label
+        ? `<button class="label-badge" data-id="${task.id}" data-action="edit-label" title="${escapeHtml(task.label)}">${escapeHtml(task.label)}</button>`
+        : `<button class="label-badge add-label" data-id="${task.id}" data-action="edit-label">+label</button>`;
+
       return `<div class="task-row${task.completed ? ' completed' : ''}${isActive ? ' active' : ''}" data-id="${task.id}"${draggable ? ' draggable="true"' : ''}>
         ${fillBarHtml}
         <span class="priority-dot priority-${task.priority}"></span>
@@ -871,6 +932,7 @@
         <span class="task-text">${escapeHtml(task.text)}</span>
         <span class="task-timer${isActive ? ' running' : ''}">${formatMs(liveMs)}</span>
         ${targetBadgeHtml}
+        ${labelBadgeHtml}
         ${notesBtnHtml}
         <button class="timer-btn" data-id="${task.id}" data-action="${isActive ? 'stop' : 'start'}">${isActive ? '■' : '▶'}</button>
         <button class="delete-btn" data-id="${task.id}">🗑</button>
@@ -903,11 +965,45 @@
       if (incomplete.length === 0 && completed.length === 0) {
         list.innerHTML = '<p class="empty-state">No tasks yet. Add one above.</p>';
       } else {
-        list.innerHTML = incomplete.map(task => taskRowHtml(task, true)).join('');
+        const unlabeled = incomplete.filter(t => !t.label);
+        const groups = {};
+        incomplete.forEach(t => {
+          if (t.label) (groups[t.label] = groups[t.label] || []).push(t);
+        });
+        const labelNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+        if (labelNames.length === 0) {
+          list.innerHTML = unlabeled.map(task => taskRowHtml(task, true)).join('');
+        } else {
+          let html = unlabeled.map(task => taskRowHtml(task, true)).join('');
+          labelNames.forEach(label => {
+            const key = 'label:' + label;
+            const expanded = labelGroupExpanded[key] !== false;
+            const chevron = expanded ? '▼' : '▶';
+            const rowsHtml = expanded
+              ? groups[label].map(task => taskRowHtml(task, true)).join('')
+              : '';
+            html += `
+              <button class="label-group-toggle" data-label-key="${escapeHtml(key)}">
+                ${chevron} ${escapeHtml(label)} (${groups[label].length})
+              </button>
+              ${rowsHtml}
+            `;
+          });
+          list.innerHTML = html;
+        }
       }
 
+      renderLabelDatalist();
       renderCompletedSection(completed);
       renderTotalTarget();
+    }
+
+    function renderLabelDatalist() {
+      const dl = document.getElementById('label-datalist');
+      if (!dl) return;
+      const labels = [...new Set(state.tasks.map(t => t.label).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      dl.innerHTML = labels.map(l => `<option value="${escapeHtml(l)}"></option>`).join('');
     }
 
     // ── Render: History ───────────────────────────────────────────────────────
@@ -1534,6 +1630,7 @@
       const srcIdx = state.tasks.findIndex(t => t.id === srcId);
       const tgtIdx = state.tasks.findIndex(t => t.id === targetId);
       if (srcIdx === -1 || tgtIdx === -1) return;
+      if ((state.tasks[srcIdx].label || null) !== (state.tasks[tgtIdx].label || null)) return;
       const [task] = state.tasks.splice(srcIdx, 1);
       state.tasks.splice(tgtIdx, 0, task);
       persist();
@@ -1558,6 +1655,38 @@
         if (saved) return;
         saved = true;
         task.dailyTargetMs = parseTargetInput(input.value);
+        persist();
+        renderTasks();
+      }
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') save();
+        if (e.key === 'Escape') { saved = true; renderTasks(); }
+      });
+      input.addEventListener('blur', save);
+    }
+
+    function openLabelEdit(taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task) return;
+      const badge = document.querySelector(`[data-id="${taskId}"][data-action="edit-label"]`);
+      if (!badge) return;
+      const currentVal = task.label || '';
+      const input = document.createElement('input');
+      input.className = 'label-edit-input';
+      input.value = currentVal;
+      input.placeholder = 'Label…';
+      input.setAttribute('list', 'label-datalist');
+      badge.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let saved = false;
+      function save() {
+        if (saved) return;
+        saved = true;
+        const val = input.value.trim();
+        task.label = val || null;
         persist();
         renderTasks();
       }
@@ -1782,12 +1911,15 @@
         const input = document.getElementById('task-input');
         const priority = document.getElementById('priority-select').value;
         const targetInput = document.getElementById('target-input');
+        const labelInput = document.getElementById('label-input');
         const text = input.value.trim();
         if (!text) return;
         const dailyTargetMs = parseTargetInput(targetInput.value);
-        addTask(text, priority, dailyTargetMs);
+        const label = labelInput.value.trim() || null;
+        addTask(text, priority, dailyTargetMs, label);
         input.value = '';
         targetInput.value = '';
+        labelInput.value = '';
         renderTasks();
       });
 
@@ -1796,6 +1928,13 @@
       });
 
       document.getElementById('task-list').addEventListener('click', e => {
+        const groupToggle = e.target.closest('.label-group-toggle');
+        if (groupToggle) {
+          const key = groupToggle.dataset.labelKey;
+          labelGroupExpanded[key] = labelGroupExpanded[key] === false ? true : false;
+          renderTasks();
+          return;
+        }
         const id = e.target.dataset.id;
         if (!id) return;
         if (e.target.classList.contains('task-check')) {
@@ -1810,6 +1949,8 @@
           renderTasks();
         } else if (e.target.dataset.action === 'edit-target') {
           openTargetEdit(id);
+        } else if (e.target.dataset.action === 'edit-label') {
+          openLabelEdit(id);
         } else if (e.target.dataset.action === 'notes') {
           openNotesModal(id);
         }
@@ -1837,6 +1978,8 @@
           renderTasks();
         } else if (e.target.dataset.action === 'edit-target') {
           openTargetEdit(id);
+        } else if (e.target.dataset.action === 'edit-label') {
+          openLabelEdit(id);
         } else if (e.target.dataset.action === 'notes') {
           openNotesModal(id);
         }
