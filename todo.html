@@ -728,6 +728,8 @@
     let pipNoteTaskId = null;
     let pipExpanded = false;
     let pipLabelFilter = null;
+    let pipFilterSignature = null;
+    let pipTaskListSignature = null;
     let pendingAudioBlob = null;
     let pendingScreenshotBlob = null;
     let mediaRecorder = null;
@@ -1546,6 +1548,7 @@
         pipWindow.addEventListener('pagehide', () => {
           pipWindow = null; pipExpanded = false; pipNoteTaskId = null;
           pipPendingAudioBlob = null; pipPendingScreenshotBlob = null; pipLabelFilter = null;
+          pipFilterSignature = null; pipTaskListSignature = null;
         });
         updatePip();
 
@@ -1612,38 +1615,54 @@
       const allIncomplete = state.tasks.filter(t => !t.completed);
       if (filterEl) {
         const distinctLabels = [...new Set(allIncomplete.map(t => t.label).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        const hasUnlabeled = allIncomplete.some(t => !t.label);
+        const filterSig = distinctLabels.join('|') + '::' + hasUnlabeled;
+
         if (distinctLabels.length === 0) {
-          filterEl.innerHTML = '';
           pipLabelFilter = null;
-        } else {
-          const hasUnlabeled = allIncomplete.some(t => !t.label);
+          if (pipFilterSignature !== filterSig) {
+            filterEl.innerHTML = '';
+            pipFilterSignature = filterSig;
+          }
+        } else if (pipFilterSignature !== filterSig) {
           filterEl.innerHTML = `<select id="pip-label-filter">
             <option value="">All labels</option>
             ${hasUnlabeled ? `<option value="__none__">No label</option>` : ''}
             ${distinctLabels.map(l => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('')}
           </select>`;
           filterEl.querySelector('select').value = pipLabelFilter || '';
+          pipFilterSignature = filterSig;
+        } else {
+          const sel = filterEl.querySelector('select');
+          if (sel && sel.value !== (pipLabelFilter || '') && doc.activeElement !== sel) {
+            sel.value = pipLabelFilter || '';
+          }
         }
       }
 
       // ── Task list ─────────────────────────────────────────────────────────────
       if (listEl) {
-        const scroll = scrollEl ? scrollEl.scrollTop : 0;
         let incomplete = allIncomplete;
         if (pipLabelFilter === '__none__') incomplete = allIncomplete.filter(t => !t.label);
         else if (pipLabelFilter) incomplete = allIncomplete.filter(t => t.label === pipLabelFilter);
-        listEl.innerHTML = incomplete.map(task => {
-          const isActive = !!task.activeTimer;
-          const dotColor = PRIORITY_COLOR[task.priority] || '#666';
-          return `<div class="pip-task${isActive ? ' pip-active' : ''}" data-id="${task.id}">
-            <span class="pip-task-dot" style="background:${dotColor}"></span>
-            <button class="pip-check-btn" data-id="${task.id}" title="Mark complete"></button>
-            <span class="pip-task-name">${escapeHtml(task.text)}</span>
-            <button class="pip-note-btn" data-id="${task.id}" title="Add note">✎</button>
-            <button class="pip-task-btn" data-id="${task.id}">${isActive ? '■' : '▶'}</button>
-          </div>`;
-        }).join('');
-        if (scrollEl) scrollEl.scrollTop = scroll;
+
+        const listSig = incomplete.map(t => `${t.id}:${t.label || ''}:${t.priority}:${t.activeTimer ? 1 : 0}`).join(',');
+        if (listSig !== pipTaskListSignature) {
+          const scroll = scrollEl ? scrollEl.scrollTop : 0;
+          listEl.innerHTML = incomplete.map(task => {
+            const isActive = !!task.activeTimer;
+            const dotColor = PRIORITY_COLOR[task.priority] || '#666';
+            return `<div class="pip-task${isActive ? ' pip-active' : ''}" data-id="${task.id}">
+              <span class="pip-task-dot" style="background:${dotColor}"></span>
+              <button class="pip-check-btn" data-id="${task.id}" title="Mark complete"></button>
+              <span class="pip-task-name">${escapeHtml(task.text)}</span>
+              <button class="pip-note-btn" data-id="${task.id}" title="Add note">✎</button>
+              <button class="pip-task-btn" data-id="${task.id}">${isActive ? '■' : '▶'}</button>
+            </div>`;
+          }).join('');
+          if (scrollEl) scrollEl.scrollTop = scroll;
+          pipTaskListSignature = listSig;
+        }
       }
     }
 
